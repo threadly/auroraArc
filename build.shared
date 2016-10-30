@@ -17,7 +17,8 @@ dependencies {
   testCompile group: 'junit', name: 'junit', version: '4.12'
 
   compile (
-    "org.threadly:threadly:4.7.1"
+    "org.threadly:threadly:4.8.1",
+    "mysql:mysql-connector-java:6.0.5"
   )
 }
 
@@ -85,6 +86,13 @@ task javadocJar(type: Jar, dependsOn: javadoc) {
 task sourcesJar(type: Jar) {
   from sourceSets.main.allSource
   classifier = 'sources'
+}
+
+build.dependsOn("copyLibs");
+
+task copyLibs(type: Copy) {
+  into "$buildDir/dependencies/"
+  from configurations.runtime
 }
 
 artifacts {
