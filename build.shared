@@ -14,11 +14,17 @@ group = 'org.threadly'
 version = '0.1.0-SNAPSHOT'
 
 dependencies {
-  testCompile group: 'junit', name: 'junit', version: '4.12'
+  testCompile (
+    "junit:junit:4.+",
+    "org.jdbi:jdbi:2.78",
+    "ch.qos.logback:logback-core:1.2.2",
+    "ch.qos.logback:logback-classic:1.2.2"
+  )
 
   compile (
-    "org.threadly:threadly:4.8.1",
-    "mysql:mysql-connector-java:6.0.5"
+    "org.threadly:threadly:4.9.0",
+    "mysql:mysql-connector-java:6.0.5",
+    "org.slf4j:slf4j-api:1.7.25"
   )
 }
 
@@ -92,7 +98,7 @@ build.dependsOn("copyLibs");
 
 task copyLibs(type: Copy) {
   into "$buildDir/dependencies/"
-  from configurations.runtime
+  from configurations.testRuntime
 }
 
 artifacts {

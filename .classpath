@@ -5,5 +5,10 @@
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/threadly"/>
 	<classpathentry kind="lib" path="build/dependencies/mysql-connector-java-6.0.5.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/jdbi-2.78.jar"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
+	<classpathentry kind="lib" path="build/dependencies/slf4j-api-1.7.25.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/logback-classic-1.2.2.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/logback-core-1.2.2.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

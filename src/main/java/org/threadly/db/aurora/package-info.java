@@ -1,4 +1,4 @@
 /**
- * Package for classes around aurora driver.
+ * Classes for the threadly aurora driver.
  */
 package org.threadly.db.aurora;

@@ -1,11 +1,14 @@
 # AuroraArc
-This project is in extremely early phases.  Unless interested in contributing, I would keep looking before bringing this into your projects.
+This project is in extremely early phases (though may be usable).  Unless interested in contributing, I would keep looking before bringing this into your projects.
 
-Primary goals:
-* Small footprint
-* High performance
-* Few dependencies, but not necessairly dependency free
+The goal is to provide a fault tollerant, and high performance, driver for AWS's Aurora servers.  The driver is designed to be small and light weight, with minimal external dependencies.
 
-Initially this project will be a layer of connection management on top of the normal MySQL java jdbc connector.  Allowing aurora functionality, and robust failover, while depending on a battle tested driver.  In addition to handling aurora's robust and fast failover, it is also designed to handling reading from the secondary read replica servers.
+## How it works
+This project currently works by having each aurora "Connection" actually be a management layer which under the hood is selecting the connection to the actual aurora host to be used.  The primary reason for this is we can then depend on the normal, and battle tested, MySQL jdbc connector (in the future we may allow any delegated driver to be used).  Resulting in the primary concern of this driver to become when we can change the underline connection, and which connection to select to distribute load across the cluster evenly.
 
-Eventually this driver may end up replacing the mysql jdbc driver dependency with a ground up implementation in order to gain specific performance gains.
+The driver aims to faciliate taking advantages of Aurora's low secondary read slave's latency by allowing the connection to be directed to a random (but healthy) secondary server when the connection is set to be `read only`.  In conditions where no healthy secondary server is available, the primary will be used for these read only requests.
+
+One of the most significant advantages to Aurora is how fast failovers can be.  Supporting this in the best way possible was a primary motivation in building this driver.  Our drivers aurora connections are able to share a common view of the cluster.  Meaning that failover events are recognized quickly, maybe from the cluster monitoring itself, or as one connection has issues, it can initiate checks to try and minimize failures.  We also do best effort attempts, for example if the master server has gone down without a clear replacement yet we will attempt to leverage the secondary servers to and maintain what we can for read only actions.
+
+Looking towards the future, it should be easy to allow other drivers to be used as well if there is a need.  In time this may become a great layer for any primary / secondary sql setup where one wants to leverage reading from the secondary replica.
+
