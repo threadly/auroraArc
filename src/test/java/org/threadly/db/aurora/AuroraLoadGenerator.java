@@ -19,6 +19,7 @@ import org.skife.jdbi.v2.sqlobject.customizers.FetchSize;
 import org.skife.jdbi.v2.sqlobject.customizers.RegisterMapper;
 import org.skife.jdbi.v2.sqlobject.mixins.Transactional;
 import org.skife.jdbi.v2.tweak.ResultSetMapper;
+import org.slf4j.LoggerFactory;
 import org.threadly.concurrent.PriorityScheduler;
 import org.threadly.concurrent.PrioritySchedulerService;
 import org.threadly.db.LoggingDriver;
@@ -30,10 +31,11 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
 public class AuroraLoadGenerator {
-  private static final int ALL_RECORD_ITERATOR_COUNT = 2;
-  private static final int INSERT_COUNT = 64;
-  private static final int SELECT_COUNT = 64;
-  private static final int RESCHEDULE_DELAY = 0; // slower for debugging
+  private static final boolean SMALL_RUN = true;
+  private static final int ALL_RECORD_ITERATOR_COUNT = SMALL_RUN ? 0 : 2;
+  private static final int INSERT_COUNT = SMALL_RUN ? 1 : 64;
+  private static final int SELECT_COUNT = SMALL_RUN ? 1 : 64;
+  private static final int RESCHEDULE_DELAY = 10; // slower for debugging
   private static final boolean LOG_DRIVER = false;
   private static final boolean POOLED = true;
   
@@ -41,9 +43,18 @@ public class AuroraLoadGenerator {
     PriorityScheduler scheduler = new PriorityScheduler(64, false);
     scheduler.prestartAllThreads();
     scheduler.setPoolSize(1024);
-    startLoadTasks(scheduler, "auroraarc.cojltqybxnei.us-west-2.rds.amazonaws.com:3306,auroraarc-1.cojltqybxnei.us-west-2.rds.amazonaws.com:3306",
+    
+    //turnOffLogger("com.zaxxer.hikari.pool.HikariPool");
+    turnOffLogger("com.zaxxer.hikari.pool.ProxyConnection");
+    turnOffLogger("com.zaxxer.hikari.pool.PoolBase");
+    
+    startLoadTasks(scheduler, "auroraarc.cojltqybxnei.us-west-2.rds.amazonaws.com:3306,auroraarc-1.cojltqybxnei.us-west-2.rds.amazonaws.com:3306,auroraarc-2.cojltqybxnei.us-west-2.rds.amazonaws.com:3306",
                    "auroraArc", "auroraArc", "auroraArc");
     scheduler.awaitTermination();
+  }
+  
+  private static void turnOffLogger(String logger) {
+    ((ch.qos.logback.classic.Logger)LoggerFactory.getLogger(logger)).setLevel(ch.qos.logback.classic.Level.OFF);
   }
   
   private static void startLoadTasks(PrioritySchedulerService scheduler, 
@@ -86,8 +97,13 @@ public class AuroraLoadGenerator {
       c.setJdbcUrl((LOG_DRIVER ? LoggingDriver.URL_PREFIX :"jdbc:mysql:aurora://") + servers + "/" + dbName + 
                      "?connectTimeout=10000&socketTimeout=10000&useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC");
       c.setDriverClassName(Driver.class.getName());
-      c.setMaximumPoolSize(64);
-      c.setMinimumIdle(64);
+      if (SMALL_RUN) {
+        c.setMaximumPoolSize(8);
+        c.setMinimumIdle(8);
+      } else {
+        c.setMaximumPoolSize(64);
+        c.setMinimumIdle(64);
+      }
       c.setIdleTimeout(0);
       c.setConnectionTimeout(600_000);
       c.setLeakDetectionThreshold(0);

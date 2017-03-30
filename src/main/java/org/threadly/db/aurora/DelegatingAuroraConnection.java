@@ -22,6 +22,9 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.threadly.util.Clock;
+import org.threadly.util.Pair;
+
 public class DelegatingAuroraConnection implements Connection {
   public static final String URL_PREFIX = "jdbc:mysql:aurora://";
 
@@ -36,7 +39,7 @@ public class DelegatingAuroraConnection implements Connection {
   private final Connection referenceConnection; // also stored in map, just used to global settings
   private final AuroraClusterMonitor clusterMonitor;
   private final AtomicBoolean closed;
-  private volatile Connection stickyConnection;
+  private volatile Pair<AuroraServer, Connection> stickyConnection;
   // state bellow is stored locally and set lazily on delegate connections
   private final AtomicInteger modificationValue;  // can overflow
   private volatile boolean readOnly;
@@ -57,19 +60,30 @@ public class DelegatingAuroraConnection implements Connection {
     }
     connections = new HashMap<>();
     Connection firstConnection = null;
+    // if we have an error connecting we still build the map (with empty values) so we can alert 
+    // other connections to check the status
+    Pair<AuroraServer, SQLException> connectException = null;
     for (String s : servers) {
       AuroraServer auroraServer = new AuroraServer(s, info);
       if (connections.containsKey(auroraServer)) {
         continue;
       }
-      connections.put(auroraServer,
-                      new ConnectionHolder(DelegateDriver.connect(s + urlArgs, info)));
-      if (firstConnection == null) {
+      try {
+        connections.put(auroraServer,
+                        connectException != null ? null : new ConnectionHolder(DelegateDriver.connect(s + urlArgs, info)));
+      } catch (SQLException e) {
+        connectException = new Pair<>(auroraServer, e);;
+      }
+      if (connectException == null && firstConnection == null) {
         firstConnection = connections.get(auroraServer).connection;
       }
     }
     referenceConnection = firstConnection;
     clusterMonitor = AuroraClusterMonitor.getMonitor(connections.keySet());
+    if (connectException != null) {
+      clusterMonitor.expediteServerCheck(connectException.getLeft());
+      throw connectException.getRight();
+    }
     closed = new AtomicBoolean();
     stickyConnection = null;
     modificationValue = new AtomicInteger();
@@ -111,7 +125,17 @@ public class DelegatingAuroraConnection implements Connection {
     return readOnly;
   }
 
-  protected Connection getDelegate() throws SQLException {
+  protected <T> T processOnDelegate(SQLOperation<T> action) throws SQLException {
+    Pair<AuroraServer, Connection> p = getDelegate();
+    try {
+      return action.run(p.getRight());
+    } catch (SQLException e) {
+      clusterMonitor.expediteServerCheck(p.getLeft());
+      throw e;
+    }
+  }
+
+  protected Pair<AuroraServer, Connection> getDelegate() throws SQLException {
     // TODO - optimize without a lock, concern is non-auto commit in parallel returning two
     //        different connections.  In addition we use the `this` lock when setting the auto
     //        commit to `true` (ensuring the sticky connection is only cleared in a safe way)
@@ -138,7 +162,7 @@ public class DelegatingAuroraConnection implements Connection {
         throw new SQLException("No healthy servers");
       }
       // server should be guaranteed to be in map
-      Connection result = connections.get(server).updateConnectionStateAndReturn(this);
+      Pair<AuroraServer, Connection> result = new Pair<>(server, connections.get(server).updateConnectionStateAndReturn(this));
       if (! autoCommit) {
         stickyConnection = result;
       }
@@ -187,7 +211,7 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public void commit() throws SQLException {
-    getDelegate().commit();
+    processOnDelegate((c) -> { c.commit(); return null; });
     // If understood correctly the sticky connection can now be reset to allow connection
     //       cycling even if autoCommit is disabled
     stickyConnection = null;
@@ -195,7 +219,7 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public void rollback() throws SQLException {
-    getDelegate().rollback();
+    processOnDelegate((c) -> { c.rollback(); return null; });
     // If understood correctly the sticky connection can now be reset to allow connection
     //       cycling even if autoCommit is disabled
     stickyConnection = null;
@@ -203,7 +227,7 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public void rollback(Savepoint savepoint) throws SQLException {
-    getDelegate().rollback(savepoint);
+    processOnDelegate((c) -> { c.rollback(savepoint); return null; });
     // If understood correctly the sticky connection can now be reset to allow connection
     //       cycling even if autoCommit is disabled
     stickyConnection = null;
@@ -211,7 +235,7 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public DatabaseMetaData getMetaData() throws SQLException {
-    return getDelegate().getMetaData();
+    return processOnDelegate((c) -> c.getMetaData());
   }
 
   @Override
@@ -302,82 +326,82 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public Savepoint setSavepoint() throws SQLException {
-    return getDelegate().setSavepoint();
+    return processOnDelegate((c) -> c.setSavepoint());
   }
 
   @Override
   public Savepoint setSavepoint(String name) throws SQLException {
-    return getDelegate().setSavepoint(name);
+    return processOnDelegate((c) -> c.setSavepoint(name));
   }
 
   @Override
   public void releaseSavepoint(Savepoint savepoint) throws SQLException {
-    getDelegate().releaseSavepoint(savepoint);
+    processOnDelegate((c) -> { c.releaseSavepoint(savepoint); return null; });
   }
 
   @Override
   public Statement createStatement() throws SQLException {
-    return getDelegate().createStatement();
+    return processOnDelegate((c) -> c.createStatement());
   }
 
   @Override
   public Statement createStatement(int resultSetType, int resultSetConcurrency) throws SQLException {
-    return getDelegate().createStatement(resultSetType, resultSetConcurrency);
+    return processOnDelegate((c) -> c.createStatement(resultSetType, resultSetConcurrency));
   }
 
   @Override
   public Statement createStatement(int resultSetType, int resultSetConcurrency,
                                    int resultSetHoldability) throws SQLException {
-    return getDelegate().createStatement(resultSetType, resultSetConcurrency, resultSetHoldability);
+    return processOnDelegate((c) -> c.createStatement(resultSetType, resultSetConcurrency, resultSetHoldability));
   }
 
   @Override
   public PreparedStatement prepareStatement(String sql) throws SQLException {
-    return getDelegate().prepareStatement(sql);
+    return processOnDelegate((c) -> c.prepareStatement(sql));
   }
 
   @Override
   public PreparedStatement prepareStatement(String sql, int resultSetType,
                                             int resultSetConcurrency) throws SQLException {
-    return getDelegate().prepareStatement(sql, resultSetType, resultSetConcurrency);
+    return processOnDelegate((c) -> c.prepareStatement(sql, resultSetType, resultSetConcurrency));
   }
 
   @Override
   public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency,
                                             int resultSetHoldability) throws SQLException {
-    return getDelegate().prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability);
+    return processOnDelegate((c) -> c.prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability));
   }
 
   @Override
   public CallableStatement prepareCall(String sql) throws SQLException {
-    return getDelegate().prepareCall(sql);
+    return processOnDelegate((c) -> c.prepareCall(sql));
   }
 
   @Override
   public CallableStatement prepareCall(String sql, int resultSetType,
                                        int resultSetConcurrency) throws SQLException {
-    return getDelegate().prepareCall(sql, resultSetType, resultSetConcurrency);
+    return processOnDelegate((c) -> c.prepareCall(sql, resultSetType, resultSetConcurrency));
   }
 
   @Override
   public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency,
                                        int resultSetHoldability) throws SQLException {
-    return getDelegate().prepareCall(sql, resultSetType, resultSetConcurrency, resultSetHoldability);
+    return processOnDelegate((c) -> c.prepareCall(sql, resultSetType, resultSetConcurrency, resultSetHoldability));
   }
 
   @Override
   public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
-    return getDelegate().prepareStatement(sql, autoGeneratedKeys);
+    return processOnDelegate((c) -> c.prepareStatement(sql, autoGeneratedKeys));
   }
 
   @Override
   public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
-    return getDelegate().prepareStatement(sql, columnIndexes);
+    return processOnDelegate((c) -> c.prepareStatement(sql, columnIndexes));
   }
 
   @Override
   public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
-    return getDelegate().prepareStatement(sql, columnNames);
+    return processOnDelegate((c) -> c.prepareStatement(sql, columnNames));
   }
 
   @Override
@@ -402,7 +426,23 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public boolean isValid(int timeout) throws SQLException {
-    return getDelegate().isValid(timeout);
+    long startTime = timeout == 0 ? 0 : Clock.accurateForwardProgressingMillis();
+    for (ConnectionHolder c : connections.values()) {
+      int remainingTimeout;
+      if (timeout == 0) {
+        remainingTimeout = 0;
+      } else {
+        // seconds are gross
+        remainingTimeout = timeout - (int)Math.floor((Clock.lastKnownForwardProgressingMillis() - startTime) / 1000.);
+        if (remainingTimeout <= 0) {
+          return false;
+        }
+      }
+      if (! c.connection.isValid(remainingTimeout)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @Override
@@ -482,6 +522,10 @@ public class DelegatingAuroraConnection implements Connection {
   @Override
   public int getNetworkTimeout() throws SQLException {
     return referenceConnection.getNetworkTimeout();
+  }
+  
+  protected interface SQLOperation<T> {
+    public T run(Connection connection) throws SQLException;
   }
 
   protected static class ConnectionHolder {

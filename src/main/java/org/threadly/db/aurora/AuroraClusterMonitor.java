@@ -115,7 +115,6 @@ public class AuroraClusterMonitor {
     return clusterStateChecker.masterServer.get();
   }
 
-  // TODO - Connections need to call into this after error occurs
   /**
    * Indicate a given server should be expedited in checking its current state.  If a given
    * connection finds issues with a suggested server informing the monitor of the issues can ensure
@@ -123,11 +122,8 @@ public class AuroraClusterMonitor {
    *
    * @param auroraServer Server identifier to be checked
    */
-  public void expiditeServerCheck(AuroraServer auroraServer) {
-    ServerMonitor monitor = clusterStateChecker.allServers.get(auroraServer);
-    if (monitor != null) {
-      scheduler.execute(monitor, TaskPriority.Low);
-    }
+  public void expediteServerCheck(AuroraServer auroraServer) {
+    clusterStateChecker.expediteServerCheck(auroraServer);
   }
 
   /**
@@ -141,6 +137,7 @@ public class AuroraClusterMonitor {
     private final Map<AuroraServer, ServerMonitor> allServers;
     private final List<AuroraServer> secondaryServers;
     private final AtomicReference<AuroraServer> masterServer;
+    private final List<AuroraServer> serversWaitingExpeditiedCheck;
 
     protected ClusterChecker(PrioritySchedulerService scheduler, long checkIntervalMillis,
                              Set<AuroraServer> clusterServers) {
@@ -148,6 +145,7 @@ public class AuroraClusterMonitor {
 
       allServers = new HashMap<>();
       secondaryServers = new CopyOnWriteArrayList<>();
+      serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
       masterServer = new AtomicReference<>();
 
       for (AuroraServer server : clusterServers) {
@@ -174,9 +172,27 @@ public class AuroraClusterMonitor {
       }
     }
 
+    protected void expediteServerCheck(ServerMonitor serverMonitor) {
+      // check is not exactly thread safe, but will stop the worst of it
+      if (! serversWaitingExpeditiedCheck.contains(serverMonitor.server)) {
+        serversWaitingExpeditiedCheck.add(serverMonitor.server);
+        scheduler.execute(() -> {
+          serversWaitingExpeditiedCheck.remove(serverMonitor.server);
+          serverMonitor.run();
+        }, TaskPriority.Low);
+      }
+    }
+
+    public void expediteServerCheck(AuroraServer auroraServer) {
+      ServerMonitor monitor = clusterStateChecker.allServers.get(auroraServer);
+      if (monitor != null) {
+        expediteServerCheck(monitor);
+      }
+    }
+
     protected void checkAllServers() {
       for (ServerMonitor sm : allServers.values()) {
-        scheduler.execute(sm, TaskPriority.Low);
+        expediteServerCheck(sm);
       }
     }
 
@@ -203,6 +219,8 @@ public class AuroraClusterMonitor {
         } else {
           if (secondaryServers.remove(p.getKey())) {
             // was secondary, so done
+            // TODO - removal of a secondary server can indicate it will become a new primary
+            //        How can we use this common behavior to recover quicker?
           } else if (p.getKey().equals(masterServer.get())) {
             // no master till we find a new one
             masterServer.compareAndSet(p.getKey(), null);
@@ -243,7 +261,7 @@ public class AuroraClusterMonitor {
     protected void reconnect() throws SQLException {
       Connection newConnection = 
           DelegateDriver.connect(server.hostAndPortString() +
-                                 "/?connectTimeout=10000&socketTimeout=10000&serverTimezone=UTC",
+                                   "/?connectTimeout=10000&socketTimeout=10000&serverTimezone=UTC",
                                  server.getProperties());
       if (serverConnection != null) { // only attempt to replace once we have a new connection without exception
         try {
