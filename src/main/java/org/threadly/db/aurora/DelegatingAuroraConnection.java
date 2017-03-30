@@ -50,6 +50,7 @@ public class DelegatingAuroraConnection implements Connection {
     }
     String urlArgs = url.substring(endDelim);
     // TODO - lookup individual servers from a single cluster URL
+    //        maybe derived from AuroraClusterMonitor to help ensure things remain consistent
     String[] servers = url.substring(URL_PREFIX.length(), endDelim).split(",");
     if (servers.length == 0) {
       throw new IllegalArgumentException("Invalid URL: " + url);
@@ -74,6 +75,10 @@ public class DelegatingAuroraConnection implements Connection {
     modificationValue = new AtomicInteger();
     readOnly = false;
     autoCommit = true;
+  }
+  
+  public String toString() {
+    return DelegatingAuroraConnection.class.getSimpleName() + ":" + connections.keySet();
   }
 
   @Override

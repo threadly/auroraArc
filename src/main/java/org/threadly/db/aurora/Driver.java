@@ -19,6 +19,14 @@ public class Driver extends AbstractArcDriver {
     }
   }
 
+  /**
+   * Another way to register the driver.  This is more convenient than `Class.forName(String)` as 
+   * no exceptions need to be handled (instead just relying on the compile time dependency).
+   */
+  public static void registerDriver() {
+    // Nothing needed, just a nicer way to initialize the static registration compared to Class.forName.
+  }
+
   @Override
   public Connection connect(String url, Properties info) throws SQLException {
     if (DelegatingAuroraConnection.acceptsURL(url)) {

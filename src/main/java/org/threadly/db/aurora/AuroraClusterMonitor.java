@@ -169,6 +169,9 @@ public class AuroraClusterMonitor {
                                       Math.abs(System.identityHashCode(monitor)) % checkIntervalMillis,
                                       checkIntervalMillis);
       }
+      if (masterServer.get() == null) {
+        log.warn("No master server found!  Will use read only servers till one becomes master");
+      }
     }
 
     protected void checkAllServers() {
@@ -217,24 +220,39 @@ public class AuroraClusterMonitor {
    */
   protected static class ServerMonitor implements Runnable {
     private final AuroraServer server;
-    private final Connection serverConnection;
     private final ReschedulingOperation clusterStateChecker;
     private final AtomicBoolean running;
-    private volatile boolean healthy = false;
-    private volatile boolean readOnly = true;
+    private Connection serverConnection;
+    private volatile boolean healthy;
+    private volatile boolean readOnly;
 
     protected ServerMonitor(AuroraServer server, ReschedulingOperation clusterStateChecker) {
       this.server = server;
+      this.clusterStateChecker = clusterStateChecker;
+      this.running = new AtomicBoolean();
       try {
-        serverConnection = DelegateDriver.connect(server.hostAndPortString() +
-                                                    "/?connectTimeout=10000&socketTimeout=10000&serverTimezone=UTC",
-                                                  server.getProperties());
+        reconnect();
       } catch (SQLException e) {
         throw new RuntimeException("Could not connect to monitor cluster member: " +
                                      server + ", error is fatal", e);
       }
-      this.clusterStateChecker = clusterStateChecker;
-      this.running = new AtomicBoolean();
+      healthy = false;
+      readOnly = false;
+    }
+    
+    protected void reconnect() throws SQLException {
+      Connection newConnection = 
+          DelegateDriver.connect(server.hostAndPortString() +
+                                 "/?connectTimeout=10000&socketTimeout=10000&serverTimezone=UTC",
+                                 server.getProperties());
+      if (serverConnection != null) { // only attempt to replace once we have a new connection without exception
+        try {
+          serverConnection.close();
+        } catch (SQLException e) {
+          // ignore errors closing connection
+        }
+      }
+      serverConnection = newConnection;
     }
 
     public boolean isHealthy() {
@@ -258,6 +276,7 @@ public class AuroraClusterMonitor {
     }
 
     protected void updateState() {
+      // we can't set our class state directly, as we need to indicate if it has changed
       boolean currentlyReadOnly = true;
       boolean currentlyHealthy = false;
       try {
@@ -268,9 +287,9 @@ public class AuroraClusterMonitor {
               // unless exactly "OFF" database will be considered read only
               String readOnlyStr = results.getString("Value");
               if (readOnlyStr.equals("OFF")) {
-                readOnly = false;
+                currentlyReadOnly = false;
               } else if (readOnlyStr.equals("ON")) {
-                readOnly = true;
+                currentlyReadOnly = true;
               } else {
                 log.error("Unknown db state, may require library upgrade: " + readOnlyStr);
               }
@@ -281,13 +300,23 @@ public class AuroraClusterMonitor {
         }
         currentlyHealthy = true;
       } catch (Throwable t) {
-        log.warn("Setting aurora server " + server + " as unhealthy due to error checking state", t);
+        if (healthy) {
+          log.warn("Setting aurora server " + server + " as unhealthy due to error checking state", t);
+        }
         currentlyHealthy = false;
       } finally {
         if (currentlyReadOnly != readOnly || currentlyHealthy != healthy) {
           healthy = currentlyHealthy;
           readOnly = currentlyReadOnly;
           clusterStateChecker.signalToRun();
+        }
+        // reconnect after state has been reflected, don't block till it is for sure known we are unhealthy
+        if (! currentlyHealthy) {
+          try {
+            reconnect();
+          } catch (SQLException e) {
+            // ignore exceptions here, will retry on the next go around
+          }
         }
       }
     }

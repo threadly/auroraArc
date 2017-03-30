@@ -10,5 +10,6 @@
 	<classpathentry kind="lib" path="build/dependencies/slf4j-api-1.7.25.jar"/>
 	<classpathentry kind="lib" path="build/dependencies/logback-classic-1.2.2.jar"/>
 	<classpathentry kind="lib" path="build/dependencies/logback-core-1.2.2.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/HikariCP-2.6.1.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

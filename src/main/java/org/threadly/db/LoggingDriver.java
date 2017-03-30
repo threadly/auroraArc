@@ -26,30 +26,40 @@ import java.util.logging.Logger;
 
 public class LoggingDriver extends AbstractArcDriver {
   public static final String URL_PREFIX = "jdbc:mysql:logging://";
+  protected static final String DELEGATE_DRIVER_PREFIX;
   protected static final java.sql.Driver DELEGATE_DRIVER;
 
   static {
     try {
-      // TODO - update to delegate to AuroraArc driver
-      DELEGATE_DRIVER = new com.mysql.cj.jdbc.Driver();
+      //DELEGATE_DRIVER_PREFIX = "jdbc:mysql://";
+      //DELEGATE_DRIVER = new com.mysql.cj.jdbc.Driver();
+      DELEGATE_DRIVER_PREFIX = "jdbc:mysql:aurora://";
+      DELEGATE_DRIVER = new org.threadly.db.aurora.Driver();
 
-      DriverManager.registerDriver(new LoggingDriver(),
-                                   () -> log("Logging driver has been deregistered"));
+      DriverManager.registerDriver(new LoggingDriver());
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
   }
 
-  protected static void log(String msg) {
-    System.out.println("SqlDriver> " + msg);
+  public static void registerDriver() {
+    // Nothing needed, just a nicer way to initialize the static registration compared to Class.forName.
+  }
+  
+  private final String logPrefix = Integer.toHexString(System.identityHashCode(this)) + "-SqlDriver> ";
+  
+  protected void log(String msg) {
+    System.out.println(logPrefix + msg);
   }
 
   @Override
   public Connection connect(String url, Properties info) throws SQLException {
     if (acceptsURL(url)) {
-      Connection c = DELEGATE_DRIVER.connect(url.replace(URL_PREFIX, "jdbc:mysql://"), info);
+      Connection c = DELEGATE_DRIVER.connect(url.replace(URL_PREFIX, DELEGATE_DRIVER_PREFIX), info);
       if (c != null) {
         c = new LoggingConnection(c);
+      } else {
+        System.err.println("No connection from delegate driver!");
       }
       return c;
     } else {
@@ -78,7 +88,7 @@ public class LoggingDriver extends AbstractArcDriver {
     return DELEGATE_DRIVER.getParentLogger();
   }
 
-  public static class LoggingConnection implements Connection {
+  public class LoggingConnection implements Connection {
     private final Connection delegateConnection;
 
     public LoggingConnection(Connection delegateConnection) throws SQLException {

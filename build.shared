@@ -17,6 +17,7 @@ dependencies {
   testCompile (
     "junit:junit:4.+",
     "org.jdbi:jdbi:2.78",
+    "com.zaxxer:HikariCP:2.6.1",
     "ch.qos.logback:logback-core:1.2.2",
     "ch.qos.logback:logback-classic:1.2.2"
   )
