@@ -4,10 +4,6 @@ apply plugin: 'signing'
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
-test {
-  maxParallelForks = Math.max(1, (int)(Runtime.getRuntime().availableProcessors() / 2))
-}
-
 compileJava {
   String[] java8Paths = new String[9]
   java8Paths[0] = "/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/rt.jar"
