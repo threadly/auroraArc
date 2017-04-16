@@ -38,9 +38,9 @@ import org.threadly.concurrent.TaskPriority;
 public class AuroraClusterMonitor {
   private static final Logger log = LoggerFactory.getLogger(AuroraClusterMonitor.class);
 
-  private static final int CHECK_FREQUENCY_MILLIS = 500;  // TODO - make configurable
-  private static final PrioritySchedulerService MONITOR_SCHEDULER;
-  private static final ConcurrentMap<List<AuroraServer>, AuroraClusterMonitor> MONITORS;
+  protected static final int CHECK_FREQUENCY_MILLIS = 500;  // TODO - make configurable
+  protected static final PrioritySchedulerService MONITOR_SCHEDULER;
+  protected static final ConcurrentMap<List<AuroraServer>, AuroraClusterMonitor> MONITORS;
 
   static {
     PriorityScheduler ps =
@@ -76,7 +76,7 @@ public class AuroraClusterMonitor {
   }
 
   protected final PrioritySchedulerService scheduler;
-  private final ClusterChecker clusterStateChecker;
+  protected final ClusterChecker clusterStateChecker;
   private final AtomicLong replicaIndex;  // used to distribute replica reads
 
   protected AuroraClusterMonitor(PrioritySchedulerService scheduler, long checkIntervalMillis,
@@ -134,10 +134,11 @@ public class AuroraClusterMonitor {
    * (and thus will witness the final cluster state).
    */
   protected class ClusterChecker extends ReschedulingOperation {
-    private final Map<AuroraServer, ServerMonitor> allServers;
-    private final List<AuroraServer> secondaryServers;
-    private final AtomicReference<AuroraServer> masterServer;
-    private final List<AuroraServer> serversWaitingExpeditiedCheck;
+    protected final Map<AuroraServer, ServerMonitor> allServers;
+    protected final List<AuroraServer> secondaryServers;
+    protected final AtomicReference<AuroraServer> masterServer;
+    protected final List<AuroraServer> serversWaitingExpeditiedCheck;
+    private volatile boolean initialized = false; // starts false to avoid updates while constructor is running
 
     protected ClusterChecker(PrioritySchedulerService scheduler, long checkIntervalMillis,
                              Set<AuroraServer> clusterServers) {
@@ -154,8 +155,12 @@ public class AuroraClusterMonitor {
 
         if (masterServer.get() == null) {  // check in thread till we find the master
           monitor.run();
-          if (! monitor.isReadOnly()) {
-            masterServer.set(server);
+          if (monitor.isHealthy()) {
+            if (! monitor.isReadOnly()) {
+              masterServer.set(server);
+            } else {
+              secondaryServers.add(server);
+            }
           }
         } else {  // all other checks can be async, adding in as secondary servers as they complete
           scheduler.execute(monitor, TaskPriority.Low);
@@ -170,6 +175,9 @@ public class AuroraClusterMonitor {
       if (masterServer.get() == null) {
         log.warn("No master server found!  Will use read only servers till one becomes master");
       }
+      
+      initialized = true;
+      signalToRun();
     }
 
     protected void expediteServerCheck(ServerMonitor serverMonitor) {
@@ -198,6 +206,11 @@ public class AuroraClusterMonitor {
 
     @Override
     protected void run() {
+      if (! initialized) {
+        // ignore state updates still initialization is done
+        return;
+      }
+      
       for (Map.Entry<AuroraServer, ServerMonitor> p : allServers.entrySet()) {
         if (p.getValue().isHealthy()) {
           if (p.getValue().isReadOnly()) {
@@ -237,11 +250,11 @@ public class AuroraClusterMonitor {
    * queried.
    */
   protected static class ServerMonitor implements Runnable {
-    private final AuroraServer server;
+    protected final AuroraServer server;
     private final ReschedulingOperation clusterStateChecker;
     private final AtomicBoolean running;
     private Connection serverConnection;
-    private volatile boolean healthy;
+    private volatile Throwable lastError;
     private volatile boolean readOnly;
 
     protected ServerMonitor(AuroraServer server, ReschedulingOperation clusterStateChecker) {
@@ -254,7 +267,7 @@ public class AuroraClusterMonitor {
         throw new RuntimeException("Could not connect to monitor cluster member: " +
                                      server + ", error is fatal", e);
       }
-      healthy = false;
+      lastError = null;
       readOnly = false;
     }
     
@@ -274,7 +287,7 @@ public class AuroraClusterMonitor {
     }
 
     public boolean isHealthy() {
-      return healthy;
+      return lastError == null;
     }
 
     public boolean isReadOnly() {
@@ -296,7 +309,7 @@ public class AuroraClusterMonitor {
     protected void updateState() {
       // we can't set our class state directly, as we need to indicate if it has changed
       boolean currentlyReadOnly = true;
-      boolean currentlyHealthy = false;
+      Throwable currentError = null;
       try {
         try (PreparedStatement ps =
                  serverConnection.prepareStatement("SHOW GLOBAL VARIABLES LIKE 'innodb_read_only';")) {
@@ -316,20 +329,19 @@ public class AuroraClusterMonitor {
             }
           }
         }
-        currentlyHealthy = true;
       } catch (Throwable t) {
-        if (healthy) {
+        currentError = t;
+        if (! t.equals(lastError)) {
           log.warn("Setting aurora server " + server + " as unhealthy due to error checking state", t);
         }
-        currentlyHealthy = false;
       } finally {
-        if (currentlyReadOnly != readOnly || currentlyHealthy != healthy) {
-          healthy = currentlyHealthy;
+        if (currentlyReadOnly != readOnly || (lastError == null) != (currentError == null)) {
+          lastError = currentError;
           readOnly = currentlyReadOnly;
           clusterStateChecker.signalToRun();
         }
         // reconnect after state has been reflected, don't block till it is for sure known we are unhealthy
-        if (! currentlyHealthy) {
+        if (currentError != null) {
           try {
             reconnect();
           } catch (SQLException e) {

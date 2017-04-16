@@ -11,5 +11,10 @@
 	<classpathentry kind="lib" path="build/dependencies/logback-classic-1.2.2.jar"/>
 	<classpathentry kind="lib" path="build/dependencies/logback-core-1.2.2.jar"/>
 	<classpathentry kind="lib" path="build/dependencies/HikariCP-2.6.1.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/mockito-core-2.7.22.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/byte-buddy-1.6.11.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/byte-buddy-agent-1.6.11.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/hamcrest-core-1.3.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/objenesis-2.5.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

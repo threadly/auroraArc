@@ -48,8 +48,8 @@ public class AuroraLoadGenerator {
     turnOffLogger("com.zaxxer.hikari.pool.ProxyConnection");
     turnOffLogger("com.zaxxer.hikari.pool.PoolBase");
     
-    startLoadTasks(scheduler, "auroraarc.cojltqybxnei.us-west-2.rds.amazonaws.com:3306,auroraarc-1.cojltqybxnei.us-west-2.rds.amazonaws.com:3306,auroraarc-2.cojltqybxnei.us-west-2.rds.amazonaws.com:3306",
-                   "auroraArc", "auroraArc", "auroraArc");
+    startLoadTasks(scheduler, "127.0.0.1",//"auroraarc.cojltqybxnei.us-west-2.rds.amazonaws.com:3306,auroraarc-1.cojltqybxnei.us-west-2.rds.amazonaws.com:3306,auroraarc-2.cojltqybxnei.us-west-2.rds.amazonaws.com:3306",
+                   "auroraArc", "", "auroraArc");
     scheduler.awaitTermination();
   }
   

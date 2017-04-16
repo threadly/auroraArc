@@ -1,5 +1,7 @@
 package org.threadly.db.aurora;
 
+import static org.mockito.Mockito.*;
+
 import java.sql.Connection;
 import java.sql.DriverPropertyInfo;
 import java.sql.SQLException;
@@ -28,20 +30,23 @@ public class DelegateMockDriver {
     private final Map<String, Connection> mockConnections = new HashMap<>();
 
     public Connection getConnectionForHost(String host) {
-      return mockConnections.get(host);
+      Connection mockConnection = mockConnections.get(host);
+      if (mockConnection == null) {
+        mockConnection = mock(Connection.class);
+        mockConnections.put(host, mockConnection);
+      }
+      return mockConnection;
     }
 
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
-      int hostStart = url.indexOf('/') + 2;
-      String host = url.substring(hostStart, url.indexOf('/', hostStart));
-
-      Connection mockConnection = mockConnections.get(host);
-      if (mockConnection == null) {
-        // TODO - mock out
-        mockConnections.put(host, mockConnection);
+      int hostStartIndex = url.indexOf('/') + 2;
+      int hostEndIndex = url.indexOf('/', hostStartIndex);
+      int portIndex = url.indexOf(':', hostStartIndex);
+      if (portIndex != -1 && portIndex < hostEndIndex) {
+        hostEndIndex = portIndex;
       }
-      return mockConnection;
+      return getConnectionForHost(url.substring(hostStartIndex, hostEndIndex));
     }
 
     @Override
