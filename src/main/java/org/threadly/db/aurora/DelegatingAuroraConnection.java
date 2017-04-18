@@ -60,7 +60,7 @@ public class DelegatingAuroraConnection implements Connection {
     }
     connections = new HashMap<>();
     Connection firstConnection = null;
-    // if we have an error connecting we still build the map (with empty values) so we can alert 
+    // if we have an error connecting we still build the map (with empty values) so we can alert
     // other connections to check the status
     Pair<AuroraServer, SQLException> connectException = null;
     for (String s : servers) {
@@ -91,6 +91,7 @@ public class DelegatingAuroraConnection implements Connection {
     autoCommit = true;
   }
   
+  @Override
   public String toString() {
     return DelegatingAuroraConnection.class.getSimpleName() + ":" + connections.keySet();
   }

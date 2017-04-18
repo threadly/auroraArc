@@ -260,7 +260,7 @@ public class AuroraClusterMonitor {
     protected ServerMonitor(AuroraServer server, ReschedulingOperation clusterStateChecker) {
       this.server = server;
       this.clusterStateChecker = clusterStateChecker;
-      this.running = new AtomicBoolean();
+      this.running = new AtomicBoolean(false);
       try {
         reconnect();
       } catch (SQLException e) {
