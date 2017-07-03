@@ -36,19 +36,21 @@ import org.threadly.concurrent.TaskPriority;
  * correctly.
  */
 public class AuroraClusterMonitor {
-  private static final Logger log = LoggerFactory.getLogger(AuroraClusterMonitor.class);
+  private static final Logger LOG = LoggerFactory.getLogger(AuroraClusterMonitor.class);
 
   protected static final int CHECK_FREQUENCY_MILLIS = 500;  // TODO - make configurable
+  protected static final int MINIMUM_THREAD_POOL_SIZE = 4;
+  protected static final int MAXIMUM_THREAD_POOL_SIZE = 32;
   protected static final PrioritySchedulerService MONITOR_SCHEDULER;
   protected static final ConcurrentMap<List<AuroraServer>, AuroraClusterMonitor> MONITORS;
 
   static {
     PriorityScheduler ps =
-        new PriorityScheduler(4, TaskPriority.High, 1000,
+        new PriorityScheduler(MINIMUM_THREAD_POOL_SIZE, TaskPriority.High, 1000,
                               new ConfigurableThreadFactory("auroraMonitor-", false, true,
                                                             Thread.NORM_PRIORITY, null, null));
     ps.prestartAllThreads();
-    ps.setPoolSize(64); // likely way bigger than will ever be needed
+    ps.setPoolSize(MAXIMUM_THREAD_POOL_SIZE); 
     MONITOR_SCHEDULER = ps;
 
     MONITORS = new ConcurrentHashMap<>();
@@ -173,7 +175,7 @@ public class AuroraClusterMonitor {
                                       checkIntervalMillis);
       }
       if (masterServer.get() == null) {
-        log.warn("No master server found!  Will use read only servers till one becomes master");
+        LOG.warn("No master server found!  Will use read only servers till one becomes master");
       }
       
       initialized = true;
@@ -226,7 +228,7 @@ public class AuroraClusterMonitor {
             if (! p.getKey().equals(masterServer.get())) {
               // either already was the master, or now is
               masterServer.set(p.getKey());
-              log.info("New master server: " + p.getKey());
+              LOG.info("New master server: " + p.getKey());
             }
           }
         } else {
@@ -322,17 +324,17 @@ public class AuroraClusterMonitor {
               } else if (readOnlyStr.equals("ON")) {
                 currentlyReadOnly = true;
               } else {
-                log.error("Unknown db state, may require library upgrade: " + readOnlyStr);
+                LOG.error("Unknown db state, may require library upgrade: " + readOnlyStr);
               }
             } else {
-              log.error("No result looking up db state, likely not connected to Aurora database");
+              LOG.error("No result looking up db state, likely not connected to Aurora database");
             }
           }
         }
       } catch (Throwable t) {
         currentError = t;
         if (! t.equals(lastError)) {
-          log.warn("Setting aurora server " + server + " as unhealthy due to error checking state", t);
+          LOG.warn("Setting aurora server " + server + " as unhealthy due to error checking state", t);
         }
       } finally {
         if (currentlyReadOnly != readOnly || (lastError == null) != (currentError == null)) {

@@ -2,7 +2,12 @@ package org.threadly.db.aurora;
 
 import java.util.Properties;
 
+/**
+ * Information about an Aurora server so that it can be referenced (and if needed connected to).
+ */
 public class AuroraServer implements Comparable<AuroraServer> {
+  private static final int DEFAULT_PORT = 3306;
+  
   private final String host;
   private final int port;
   private final Properties info;
@@ -15,7 +20,7 @@ public class AuroraServer implements Comparable<AuroraServer> {
       port = Integer.parseInt(server.substring(delim + 1));
     } else {
       host = server.toLowerCase().intern();
-      port = 3306;
+      port = DEFAULT_PORT;
     }
     this.info = info; // not currently considered in equality or hash
 

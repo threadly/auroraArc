@@ -73,7 +73,7 @@ public class DriverLocalDbTest {
     }
     UnfairExecutor executor = new UnfairExecutor(31);
     dao.deleteRecords();
-    for (int i = 0; i < 10_000; i++) {
+    for (int i = 0; i < 1_000; i++) {
       executor.execute(() -> dao.insertRecord(StringUtils.makeRandomString(10)));
     }
     executor.shutdown();

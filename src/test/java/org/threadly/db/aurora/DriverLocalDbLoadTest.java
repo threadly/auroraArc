@@ -112,7 +112,7 @@ public class DriverLocalDbLoadTest extends DriverLocalDbTest {
   public void flipTransactionLevel() throws SQLException {
     try (Handle h = DBI.open()) {
       Connection c = h.getConnection();
-      for (int i = 0; i < RUN_COUNT_REFERENCE * 100; i++) {
+      for (int i = 0; i < RUN_COUNT_REFERENCE * 200_000; i++) {
         c.setTransactionIsolation((i % 2) + 1);
       }
     }

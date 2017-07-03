@@ -26,6 +26,14 @@ import org.threadly.db.aurora.DelegatingAuroraConnection.ConnectionStateManager.
 import org.threadly.util.Clock;
 import org.threadly.util.Pair;
 
+/**
+ * Implementation of {@link Connection} which under the hood delegates to one of several 
+ * connections to an Aurora server.  This uses the {@link AuroraClusterMonitor} to monitor the 
+ * provided cluster, and intelligently choose which connection to delegate to.
+ * <p>
+ * From an external perspective this is just a single connection doing some magic to fairly 
+ * distribute load if possible, and to handle fail over conditions with minimal impact.
+ */
 public class DelegatingAuroraConnection implements Connection {
   public static final String URL_PREFIX = "jdbc:mysql:aurora://";
 
@@ -48,6 +56,14 @@ public class DelegatingAuroraConnection implements Connection {
   private final AtomicBoolean closed;
   private volatile Pair<AuroraServer, ConnectionHolder> stickyConnection;
 
+  /**
+   * Construct a new connection with the provided url and info.  The URL should be prefixed with 
+   * {@link #URL_PREFIX}.  Aurora servers should be delineated by {@code ','}.
+   * 
+   * @param url Servers and connect properties to connect to
+   * @param info Info properties
+   * @throws SQLException
+   */
   public DelegatingAuroraConnection(String url, Properties info) throws SQLException {
     int endDelim = url.indexOf('/', URL_PREFIX.length());
     if (endDelim < 0) {
@@ -79,7 +95,8 @@ public class DelegatingAuroraConnection implements Connection {
       }
       try {
         connections.put(auroraServer,
-                        connectException != null ? null : connectionStateManager.wrapConnection(DelegateDriver.connect(s + urlArgs, info)));
+                        connectException != null ? 
+                          null : connectionStateManager.wrapConnection(DelegateDriver.connect(s + urlArgs, info)));
       } catch (SQLException e) {
         connectException = new Pair<>(auroraServer, e);
       }
@@ -526,6 +543,12 @@ public class DelegatingAuroraConnection implements Connection {
     return referenceConnection.getNetworkTimeout();
   }
   
+  /**
+   * Small interface for operations which are delegated to a given connection.  Primarily 
+   * needed due to the possible exception case.
+   * 
+   * @param <T> Type of result returned from operation
+   */
   protected interface SQLOperation<T> {
     public T run(Connection connection) throws SQLException;
   }
@@ -534,7 +557,7 @@ public class DelegatingAuroraConnection implements Connection {
    * Class for maintaining state which is maintained and only updated lazily when the wrapped 
    * {@link ConnectionHolder#verifiedState()} is invoked.
    */
-  protected static abstract class ConnectionStateManager {
+  protected abstract static class ConnectionStateManager {
     // state bellow is stored locally and set lazily on delegate connections
     protected volatile boolean readOnly;
     protected volatile boolean autoCommit;
@@ -564,6 +587,14 @@ public class DelegatingAuroraConnection implements Connection {
       return transactionIsolationLevel;
     }
     
+    /**
+     * Wrap the connection in a holder that will then be able to be kept in reference to the state 
+     * that is modified on this manager.
+     * 
+     * @param connection Connection to be wrapped / updated
+     * @return Holder specific to the connection provided
+     * @throws SQLException Thrown if delegate connection throws while initializing the state
+     */
     public ConnectionHolder wrapConnection(Connection connection) throws SQLException {
       if (transactionIsolationLevel == Integer.MIN_VALUE) {
         // startup state from first connection we see
@@ -576,7 +607,13 @@ public class DelegatingAuroraConnection implements Connection {
     
     protected abstract ConnectionHolder makeConnectionHolder(Connection connection);
     
-    public static abstract class ConnectionHolder {
+    /**
+     * Holder of a connection.  The connection can be retrieved from this holder.  At the time of 
+     * requesting the connection if a consistent state is important {@link #verifiedState()} 
+     * should be used.  Otherwise {@link #uncheckedState()} is a faster way to get to the internal 
+     * connection reference.
+     */
+    public abstract static class ConnectionHolder {
       protected final Connection connection;
 
       public ConnectionHolder(Connection connection) {
@@ -639,6 +676,10 @@ public class DelegatingAuroraConnection implements Connection {
       return new SafeConnectionHolder(connection);
     }
 
+    /**
+     * Connection holder which updates {@link #verifiedState()} in such a way that minimizes 
+     * interactions from this delegating driver.
+     */
     protected class SafeConnectionHolder extends ConnectionHolder {
       private int connectionReadOnlyModificationCount;
       private int connectionAutoCommitModificationCount;
@@ -682,6 +723,12 @@ public class DelegatingAuroraConnection implements Connection {
       return new OptimizedConnectionHolder(connection);
     }
 
+    /**
+     * Connection holder which updates the state in {@link #verifiedState()} in such a way that 
+     * minimizes processing and possible updates to the retained connection.  This should be safe 
+     * but because it modifies behavior further the possibility for unexpected interactions are 
+     * higher.
+     */
     protected class OptimizedConnectionHolder extends ConnectionHolder {
       private boolean connectionReadOnly;
       private boolean connectionAutoCommit;

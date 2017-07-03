@@ -4,6 +4,10 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Properties;
 
+/**
+ * Driver for creating connections to a given delegate implementation.  This ultimately deals with 
+ * creating a URL that is suited for that driver and then using it to establish the connection.
+ */
 public class DelegateDriver {
   protected static final String DRIVER_CONNECT_PREFIX = "jdbc:mysql://";
   protected static java.sql.Driver delegateDriver;  // not final so can be replaced in test

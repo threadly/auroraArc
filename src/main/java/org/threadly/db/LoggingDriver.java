@@ -24,6 +24,12 @@ import java.util.Properties;
 import java.util.concurrent.Executor;
 import java.util.logging.Logger;
 
+/**
+ * Driver mapped with {@code "jdbc:mysql:logging://"} url's that will log out actions occurring.
+ * <p>  
+ * This is not intended to be used externally, but rather is a tool for debugging and internal 
+ * driver development.
+ */
 public class LoggingDriver extends AbstractArcDriver {
   public static final String URL_PREFIX = "jdbc:mysql:logging://";
   protected static final String DELEGATE_DRIVER_PREFIX;
@@ -41,7 +47,11 @@ public class LoggingDriver extends AbstractArcDriver {
       throw new RuntimeException(e);
     }
   }
-
+  
+  /**
+   * Another way to register the driver.  This is more convenient than `Class.forName(String)` as 
+   * no exceptions need to be handled (instead just relying on the compile time dependency).
+   */
   public static void registerDriver() {
     // Nothing needed, just a nicer way to initialize the static registration compared to Class.forName.
   }
@@ -88,7 +98,11 @@ public class LoggingDriver extends AbstractArcDriver {
     return DELEGATE_DRIVER.getParentLogger();
   }
 
-  public class LoggingConnection implements Connection {
+  /**
+   * Connection implementation that will delegate to this classes {@link #log(String)} function as 
+   * actions are invoked on it.
+   */
+  protected class LoggingConnection implements Connection {
     private final Connection delegateConnection;
 
     public LoggingConnection(Connection delegateConnection) throws SQLException {
