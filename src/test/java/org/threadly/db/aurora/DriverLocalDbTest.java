@@ -68,6 +68,9 @@ public class DriverLocalDbTest {
 
   @Test
   public void a0_setup() throws InterruptedException {
+    if (LOGGING_DRIVER) {
+      return; // too much
+    }
     UnfairExecutor executor = new UnfairExecutor(31);
     dao.deleteRecords();
     for (int i = 0; i < 10_000; i++) {

@@ -33,9 +33,13 @@ public class DelegatingAuroraConnection implements Connection {
     return url != null && url.startsWith(DelegatingAuroraConnection.URL_PREFIX);
   }
 
-  // TODO - Updates to connections are synchronized on connections
-  //        We should figure out a better way to handle this, particularly for frequent operations
-  //        like setting auto commit (maybe set locally and checked at delegate lookup time?)
+  /* Updates for frequently changed state values is managed by the `ConnectionStateManager`. 
+   * Updates which need to applied immediately, or which are unlikely to be performance concerns 
+   * are in contrast updated while synchronizing on the `connections` array and applied to all 
+   * in the calling thread.  If any of these synchronized states show to be performance sensitive 
+   * areas we may move them into the `ConnectionStateManager`, but we want to avoid doing that 
+   * unnecessarily so that it does not become burdened with too much state tracking.
+   */
   private final ConnectionStateManager connectionStateManager;
   private final ConnectionHolder[] connections;
   private final AuroraServer[] servers;
@@ -46,7 +50,6 @@ public class DelegatingAuroraConnection implements Connection {
 
   public DelegatingAuroraConnection(String url, Properties info) throws SQLException {
     int endDelim = url.indexOf('/', URL_PREFIX.length());
-    // TODO - want to do more input url verification?
     if (endDelim < 0) {
       throw new IllegalArgumentException("Invalid URL: " + url);
     }
