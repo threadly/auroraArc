@@ -40,7 +40,7 @@ public class DelegatingAuroraConnection implements Connection {
   private final Connection referenceConnection; // also stored in map, just used to global settings
   private final AuroraClusterMonitor clusterMonitor;
   private final AtomicBoolean closed;
-  private volatile Pair<AuroraServer, Connection> stickyConnection;
+  private volatile Pair<AuroraServer, ConnectionHolder> stickyConnection;
   // state bellow is stored locally and set lazily on delegate connections
   private volatile boolean readOnly;
   private volatile boolean autoCommit;
@@ -142,16 +142,16 @@ public class DelegatingAuroraConnection implements Connection {
   }
 
   protected <T> T processOnDelegate(SQLOperation<T> action) throws SQLException {
-    Pair<AuroraServer, Connection> p = getDelegate();
+    Pair<AuroraServer, ConnectionHolder> p = getDelegate();
     try {
-      return action.run(p.getRight());
+      return action.run(p.getRight().updateConnectionStateAndReturn(this));
     } catch (SQLException e) {
       clusterMonitor.expediteServerCheck(p.getLeft());
       throw e;
     }
   }
 
-  protected Pair<AuroraServer, Connection> getDelegate() throws SQLException {
+  protected Pair<AuroraServer, ConnectionHolder> getDelegate() throws SQLException {
     // TODO - optimize without a lock, concern is non-auto commit in parallel returning two
     //        different connections.  In addition we use the `this` lock when setting the auto
     //        commit to `true` (ensuring the sticky connection is only cleared in a safe way)
@@ -180,8 +180,7 @@ public class DelegatingAuroraConnection implements Connection {
       // server should be guaranteed to be in map
       for (int i = 0; i < servers.length; i++) {
         if (servers[i].equals(server)) {
-          Pair<AuroraServer, Connection> result = 
-              new Pair<>(server, connections[i].updateConnectionStateAndReturn(this));
+          Pair<AuroraServer, ConnectionHolder> result = new Pair<>(server, connections[i]);
           if (! autoCommit) {
             stickyConnection = result;
           }
