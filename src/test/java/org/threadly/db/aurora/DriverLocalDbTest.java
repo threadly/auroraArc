@@ -8,10 +8,10 @@ import java.sql.Timestamp;
 import java.util.Iterator;
 import java.util.List;
 
-import org.junit.AfterClass;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 import org.skife.jdbi.v2.DBI;
@@ -35,27 +35,33 @@ import org.threadly.util.SuppressedStackRuntimeException;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING) // tests prefixed `a|z[0-9]_` to set order where it matters
 public class DriverLocalDbTest {
-  private static JdbiDao DAO;
+  protected static DBI DBI;
 
   @BeforeClass
   public static void setupClass() throws ClassNotFoundException {
     Class.forName(Driver.class.getName());
-    DBI dbi = new DBI("jdbc:mysql:aurora://127.0.0.1:3306/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC",
+    DBI = new DBI("jdbc:mysql:aurora://127.0.0.1:3306,127.0.0.2:3306,127.0.0.3:3306,127.0.0.4:3306/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC",
                       "auroraArc", "");
-    DAO = dbi.open(JdbiDao.class);
+  }
+  
+  protected JdbiDao dao;
+
+  @Before
+  public void setup() {
+    dao = DBI.open(JdbiDao.class);
   }
 
-  @AfterClass
-  public static void cleanupClass() {
-    DAO.close();
+  @After
+  public void cleanup() {
+    dao.close();
   }
 
   @Test
-  @Ignore
   public void a0_setup() throws InterruptedException {
     UnfairExecutor executor = new UnfairExecutor(31);
+    dao.deleteRecords();
     for (int i = 0; i < 10_000; i++) {
-      executor.execute(() -> DAO.insertRecord(StringUtils.makeRandomString(10)));
+      executor.execute(() -> dao.insertRecord(StringUtils.makeRandomString(10)));
     }
     executor.shutdown();
     executor.awaitTermination();
@@ -63,34 +69,73 @@ public class DriverLocalDbTest {
 
   @Test
   public void a1_insertRecord() {
-    DAO.insertRecord(StringUtils.makeRandomString(5));
+    dao.insertRecord(StringUtils.makeRandomString(5));
   }
 
   @Test
   public void a1_insertRecordAndReturnId() {
-    int id = DAO.insertRecordAndReturnId(StringUtils.makeRandomString(5));
+    int id = dao.insertRecordAndReturnId(StringUtils.makeRandomString(5));
     assertTrue(id > 1);
   }
 
   @Test
   public void a1_insertRecordInterfaceTransactionAndCountVerification() {
-    int expectedCount = DAO.recordCount() + 1;
-    int count = DAO.insertRecordAndReturnCount(StringUtils.makeRandomString(5));
+    int expectedCount = dao.recordCount() + 1;
+    int count = dao.insertRecordAndReturnCount(StringUtils.makeRandomString(5));
     assertEquals(expectedCount, count);
-    assertEquals(expectedCount, DAO.recordCount());
+    assertEquals(expectedCount, dao.recordCount());
   }
 
   @Test
-  public void lookupSingleRecord() {
-    Pair<Long, String> p = DAO.lookupRecord(1);
+  public void a2_transactionInsertAndLookup() {
+    dao.inTransaction((txDao, txStatus) -> {
+      txDao.lookupRecord(1);
+      txDao.insertRecordAndReturnId(StringUtils.makeRandomString(5));
+      return txDao.recordCount();
+    });
+  }
+
+  @Test
+  public void a3_lookupSingleRecord() {
+    Pair<Long, String> p = dao.lookupRecord(1);
     assertNotNull(p);
   }
 
   @Test
+  public void lookupMissingRecord() {
+    Pair<Long, String> p = dao.lookupRecord(-1);
+    assertNull(p);
+  }
+
+  @Test (expected = SuppressedStackRuntimeException.class)
+  public void transactionInsertAndLookupExceptionThrownBeforeAnyAction() {
+    dao.inTransaction((txDao, txStatus) -> {
+      throw new SuppressedStackRuntimeException();
+    });
+  }
+
+  @Test (expected = SuppressedStackRuntimeException.class)
+  public void transactionInsertAndLookupExceptionThrownAfterLookup() {
+    dao.inTransaction((txDao, txStatus) -> {
+      txDao.lookupRecord(1);
+      throw new SuppressedStackRuntimeException();
+    });
+  }
+
+  @Test (expected = SuppressedStackRuntimeException.class)
+  public void transactionInsertAndLookupExceptionThrownAfterDone() {
+    dao.inTransaction((txDao, txStatus) -> {
+      txDao.lookupRecord(1);
+      txDao.insertRecordAndReturnId(StringUtils.makeRandomString(5));
+      throw new SuppressedStackRuntimeException();
+    });
+  }
+
+  @Test
   public void z_lookupRecordsPaged() throws InterruptedException {
-    int expectedCount = DAO.recordCount();
+    int expectedCount = dao.recordCount();
     int count = 0;
-    Iterator<?> it = DAO.lookupAllRecords();
+    Iterator<?> it = dao.lookupAllRecords();
     while (it.hasNext()) {
       count++;
       it.next(); // ignore value
@@ -100,47 +145,17 @@ public class DriverLocalDbTest {
 
   @Test
   public void z_lookupRecordsCollection() {
-    DAO.lookupRecordsCreatedBefore(new Timestamp(Clock.lastKnownTimeMillis() -
-                                                   Clock.accurateForwardProgressingMillis()));
-  }
-
-  @Test
-  public void a2_transactionInsertAndLookup() {
-    DAO.inTransaction((rt, dao) -> {
-      DAO.lookupRecord(1);
-      DAO.insertRecordAndReturnId(StringUtils.makeRandomString(5));
-      return DAO.recordCount();
-    });
-  }
-
-  @Test (expected = SuppressedStackRuntimeException.class)
-  public void transactionInsertAndLookupExceptionThrownBeforeAnyAction() {
-    DAO.inTransaction((rt, dao) -> {
-      throw new SuppressedStackRuntimeException();
-    });
-  }
-
-  @Test (expected = SuppressedStackRuntimeException.class)
-  public void transactionInsertAndLookupExceptionThrownAfterLookup() {
-    DAO.inTransaction((rt, dao) -> {
-      DAO.lookupRecord(1);
-      throw new SuppressedStackRuntimeException();
-    });
-  }
-
-  @Test (expected = SuppressedStackRuntimeException.class)
-  public void transactionInsertAndLookupExceptionThrownAfterDone() {
-    DAO.inTransaction((rt, dao) -> {
-      DAO.lookupRecord(1);
-      DAO.insertRecordAndReturnId(StringUtils.makeRandomString(5));
-      throw new SuppressedStackRuntimeException();
-    });
+    dao.lookupRecordsCreatedBefore(new Timestamp(Clock.lastKnownTimeMillis() -
+                                                   Clock.lastKnownForwardProgressingMillis()));
   }
 
   @RegisterMapper(RecordPairMapper.class)
   public abstract static class JdbiDao implements Transactional<JdbiDao> {
     @SqlUpdate("INSERT INTO records (value, created_date) VALUES (:record, NOW())")
     public abstract void insertRecord(@Bind("record") String record);
+
+    @SqlUpdate("DELETE FROM records WHERE id != 1")
+    public abstract void deleteRecords();
 
     @GetGeneratedKeys
     @SqlUpdate("INSERT INTO records (value, created_date) VALUES (:record, NOW())")

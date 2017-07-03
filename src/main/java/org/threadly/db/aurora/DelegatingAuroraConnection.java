@@ -15,6 +15,7 @@ import java.sql.SQLXML;
 import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -35,7 +36,8 @@ public class DelegatingAuroraConnection implements Connection {
   // TODO - Updates to connections are synchronized on connections
   //        We should figure out a better way to handle this, particularly for frequent operations
   //        like setting auto commit (maybe set locally and checked at delegate lookup time?)
-  private final Map<AuroraServer, ConnectionHolder> connections;
+  private final ConnectionHolder[] connections;
+  private final AuroraServer[] servers;
   private final Connection referenceConnection; // also stored in map, just used to global settings
   private final AuroraClusterMonitor clusterMonitor;
   private final AtomicBoolean closed;
@@ -58,7 +60,7 @@ public class DelegatingAuroraConnection implements Connection {
     if (servers.length == 0) {
       throw new IllegalArgumentException("Invalid URL: " + url);
     }
-    connections = new HashMap<>();
+    Map<AuroraServer, ConnectionHolder> connections = new HashMap<>();
     Connection firstConnection = null;
     // if we have an error connecting we still build the map (with empty values) so we can alert
     // other connections to check the status
@@ -72,12 +74,14 @@ public class DelegatingAuroraConnection implements Connection {
         connections.put(auroraServer,
                         connectException != null ? null : new ConnectionHolder(DelegateDriver.connect(s + urlArgs, info)));
       } catch (SQLException e) {
-        connectException = new Pair<>(auroraServer, e);;
+        connectException = new Pair<>(auroraServer, e);
       }
       if (connectException == null && firstConnection == null) {
         firstConnection = connections.get(auroraServer).connection;
       }
     }
+    this.connections = connections.values().toArray(new ConnectionHolder[connections.size()]);
+    this.servers = connections.keySet().toArray(new AuroraServer[connections.size()]);
     referenceConnection = firstConnection;
     clusterMonitor = AuroraClusterMonitor.getMonitor(connections.keySet());
     if (connectException != null) {
@@ -87,21 +91,22 @@ public class DelegatingAuroraConnection implements Connection {
     closed = new AtomicBoolean();
     stickyConnection = null;
     modificationValue = new AtomicInteger();
-    readOnly = false;
+    readOnly = referenceConnection.isReadOnly();
     autoCommit = true;
   }
   
   @Override
   public String toString() {
-    return DelegatingAuroraConnection.class.getSimpleName() + ":" + connections.keySet();
+    // TODO - I think we can produce a better string than this
+    return DelegatingAuroraConnection.class.getSimpleName() + ":" + Arrays.toString(servers);
   }
 
   @Override
   public void close() throws SQLException {
     if (closed.compareAndSet(false, true)) {
       synchronized (connections) {
-        for (ConnectionHolder c : connections.values()) {
-          c.connection.close();
+        for (ConnectionHolder ch : connections) {
+          ch.connection.close();
         }
       }
     }
@@ -163,11 +168,17 @@ public class DelegatingAuroraConnection implements Connection {
         throw new SQLException("No healthy servers");
       }
       // server should be guaranteed to be in map
-      Pair<AuroraServer, Connection> result = new Pair<>(server, connections.get(server).updateConnectionStateAndReturn(this));
-      if (! autoCommit) {
-        stickyConnection = result;
+      for (int i = 0; i < servers.length; i++) {
+        if (servers[i].equals(server)) {
+          Pair<AuroraServer, Connection> result = 
+              new Pair<>(server, connections[i].updateConnectionStateAndReturn(this));
+          if (! autoCommit) {
+            stickyConnection = result;
+          }
+          return result;
+        }
       }
-      return result;
+      throw new IllegalStateException("Cluster monitor provided unknown server");
     }
   }
 
@@ -244,8 +255,8 @@ public class DelegatingAuroraConnection implements Connection {
     synchronized (connections) {
       if ((referenceConnection.getCatalog() == null && catalog != null) ||
           ! referenceConnection.getCatalog().equals(catalog)) {
-        for (ConnectionHolder c : connections.values()) {
-          c.connection.setCatalog(catalog);
+        for (ConnectionHolder ch : connections) {
+          ch.connection.setCatalog(catalog);
         }
       }
     }
@@ -260,8 +271,8 @@ public class DelegatingAuroraConnection implements Connection {
   public void setTransactionIsolation(int level) throws SQLException {
     synchronized (connections) {
       if (referenceConnection.getTransactionIsolation() != level) {
-        for (ConnectionHolder c : connections.values()) {
-          c.connection.setTransactionIsolation(level);
+        for (ConnectionHolder ch : connections) {
+          ch.connection.setTransactionIsolation(level);
         }
       }
     }
@@ -275,8 +286,8 @@ public class DelegatingAuroraConnection implements Connection {
   @Override
   public SQLWarning getWarnings() throws SQLException {
     SQLWarning result = null;
-    for (ConnectionHolder c : connections.values()) {
-      SQLWarning conWarnings = c.connection.getWarnings();
+    for (ConnectionHolder ch : connections) {
+      SQLWarning conWarnings = ch.connection.getWarnings();
       if (conWarnings != null) {
         if (result == null) {
           result = conWarnings;
@@ -290,8 +301,8 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public void clearWarnings() throws SQLException {
-    for (ConnectionHolder c : connections.values()) {
-      c.connection.clearWarnings();
+    for (ConnectionHolder ch : connections) {
+      ch.connection.clearWarnings();
     }
   }
 
@@ -303,8 +314,8 @@ public class DelegatingAuroraConnection implements Connection {
   @Override
   public void setTypeMap(Map<String, Class<?>> map) throws SQLException {
     synchronized (connections) {
-      for (ConnectionHolder c : connections.values()) {
-        c.connection.setTypeMap(map);
+      for (ConnectionHolder ch : connections) {
+        ch.connection.setTypeMap(map);
       }
     }
   }
@@ -313,8 +324,8 @@ public class DelegatingAuroraConnection implements Connection {
   public void setHoldability(int holdability) throws SQLException {
     synchronized (connections) {
       if (referenceConnection.getHoldability() != holdability) {
-        for (ConnectionHolder c : connections.values()) {
-          c.connection.setHoldability(holdability);
+        for (ConnectionHolder ch : connections) {
+          ch.connection.setHoldability(holdability);
         }
       }
     }
@@ -428,7 +439,7 @@ public class DelegatingAuroraConnection implements Connection {
   @Override
   public boolean isValid(int timeout) throws SQLException {
     long startTime = timeout == 0 ? 0 : Clock.accurateForwardProgressingMillis();
-    for (ConnectionHolder c : connections.values()) {
+    for (ConnectionHolder ch : connections) {
       int remainingTimeout;
       if (timeout == 0) {
         remainingTimeout = 0;
@@ -439,7 +450,7 @@ public class DelegatingAuroraConnection implements Connection {
           return false;
         }
       }
-      if (! c.connection.isValid(remainingTimeout)) {
+      if (! ch.connection.isValid(remainingTimeout)) {
         return false;
       }
     }
@@ -449,8 +460,8 @@ public class DelegatingAuroraConnection implements Connection {
   @Override
   public void setClientInfo(String name, String value) throws SQLClientInfoException {
     synchronized (connections) {
-      for (ConnectionHolder c : connections.values()) {
-        c.connection.setClientInfo(name, value);
+      for (ConnectionHolder ch : connections) {
+        ch.connection.setClientInfo(name, value);
       }
     }
   }
@@ -458,8 +469,8 @@ public class DelegatingAuroraConnection implements Connection {
   @Override
   public void setClientInfo(Properties properties) throws SQLClientInfoException {
     synchronized (connections) {
-      for (ConnectionHolder c : connections.values()) {
-        c.connection.setClientInfo(properties);
+      for (ConnectionHolder ch : connections) {
+        ch.connection.setClientInfo(properties);
       }
     }
   }
@@ -489,8 +500,8 @@ public class DelegatingAuroraConnection implements Connection {
     synchronized (connections) {
       if ((referenceConnection.getSchema() == null && schema != null) ||
           ! referenceConnection.getSchema().equals(schema)) {
-        for (ConnectionHolder c : connections.values()) {
-          c.connection.setSchema(schema);
+        for (ConnectionHolder ch : connections) {
+          ch.connection.setSchema(schema);
         }
       }
     }
@@ -505,8 +516,8 @@ public class DelegatingAuroraConnection implements Connection {
   public void abort(Executor executor) throws SQLException {
     synchronized (connections) {
       closed.set(true);
-      for (ConnectionHolder c : connections.values()) {
-        c.connection.abort(executor);
+      for (ConnectionHolder ch : connections) {
+        ch.connection.abort(executor);
       }
     }
   }
@@ -514,8 +525,8 @@ public class DelegatingAuroraConnection implements Connection {
   @Override
   public void setNetworkTimeout(Executor executor, int milliseconds) throws SQLException {
     synchronized (connections) {
-      for (ConnectionHolder c : connections.values()) {
-        c.connection.setNetworkTimeout(executor, milliseconds);
+      for (ConnectionHolder ch : connections) {
+        ch.connection.setNetworkTimeout(executor, milliseconds);
       }
     }
   }
