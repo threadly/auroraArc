@@ -79,7 +79,7 @@ public class DriverLocalDbTest {
   }
 
   @Test
-  public void a1_insertRecordInterfaceTransactionAndCountVerification() {
+  public void a1_insertRecordInterfaceTransactionAndCount() {
     int expectedCount = dao.recordCount() + 1;
     int count = dao.insertRecordAndReturnCount(StringUtils.makeRandomString(5));
     assertEquals(expectedCount, count);

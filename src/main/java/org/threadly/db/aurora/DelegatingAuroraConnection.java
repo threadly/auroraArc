@@ -21,7 +21,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.threadly.util.Clock;
 import org.threadly.util.Pair;
@@ -43,9 +42,22 @@ public class DelegatingAuroraConnection implements Connection {
   private final AtomicBoolean closed;
   private volatile Pair<AuroraServer, Connection> stickyConnection;
   // state bellow is stored locally and set lazily on delegate connections
-  private final AtomicInteger modificationValue;  // can overflow
   private volatile boolean readOnly;
   private volatile boolean autoCommit;
+  private volatile int transactionIsolationLevel;
+  /* modification values are volatile, parallel missed updates would not be a problem since this is 
+   * only to determine if a change has occurred since the last check (which would not get lost, also 
+   * not to mention parallel updates occurring is almost impossibly low odds).
+   *
+   * These values can overflow without concern as well.
+   * 
+   * In concept, we could track the last known state and only update the delegate connection
+   * if it has changed.  However in an attempt to modify behavior to the delegate connections as 
+   * little as possible we will forward requests that we might have otherwise thought were useless.
+   */
+  private volatile short readOnlyModificationCount = 0;
+  private volatile short autoCommitModificationCount = 0;
+  private volatile short transactionIsolationLevelModificationCount = 0;
 
   public DelegatingAuroraConnection(String url, Properties info) throws SQLException {
     int endDelim = url.indexOf('/', URL_PREFIX.length());
@@ -61,7 +73,7 @@ public class DelegatingAuroraConnection implements Connection {
       throw new IllegalArgumentException("Invalid URL: " + url);
     }
     Map<AuroraServer, ConnectionHolder> connections = new HashMap<>();
-    Connection firstConnection = null;
+    ConnectionHolder firstConnectionHolder = null;
     // if we have an error connecting we still build the map (with empty values) so we can alert
     // other connections to check the status
     Pair<AuroraServer, SQLException> connectException = null;
@@ -76,13 +88,13 @@ public class DelegatingAuroraConnection implements Connection {
       } catch (SQLException e) {
         connectException = new Pair<>(auroraServer, e);
       }
-      if (connectException == null && firstConnection == null) {
-        firstConnection = connections.get(auroraServer).connection;
+      if (connectException == null && firstConnectionHolder == null) {
+        firstConnectionHolder = connections.get(auroraServer);
       }
     }
     this.connections = connections.values().toArray(new ConnectionHolder[connections.size()]);
     this.servers = connections.keySet().toArray(new AuroraServer[connections.size()]);
-    referenceConnection = firstConnection;
+    referenceConnection = firstConnectionHolder.connection;
     clusterMonitor = AuroraClusterMonitor.getMonitor(connections.keySet());
     if (connectException != null) {
       clusterMonitor.expediteServerCheck(connectException.getLeft());
@@ -90,9 +102,9 @@ public class DelegatingAuroraConnection implements Connection {
     }
     closed = new AtomicBoolean();
     stickyConnection = null;
-    modificationValue = new AtomicInteger();
     readOnly = referenceConnection.isReadOnly();
-    autoCommit = true;
+    autoCommit = referenceConnection.getAutoCommit();
+    transactionIsolationLevel = referenceConnection.getTransactionIsolation();
   }
   
   @Override
@@ -120,10 +132,8 @@ public class DelegatingAuroraConnection implements Connection {
   @Override
   public void setReadOnly(boolean readOnly) throws SQLException {
     // maintained locally and set lazily as delegate connections are returned
-    if (this.readOnly != readOnly) {
-      this.readOnly = readOnly;
-      modificationValue.incrementAndGet();
-    }
+    this.readOnly = readOnly;
+    readOnlyModificationCount++;
   }
 
   @Override
@@ -206,12 +216,10 @@ public class DelegatingAuroraConnection implements Connection {
   public void setAutoCommit(boolean autoCommit) throws SQLException {
     // maintained locally and set lazily as delegate connections are returned
     synchronized (this) {
-      if (this.autoCommit != autoCommit) {
-        this.autoCommit = autoCommit;
-        if (autoCommit) {
-          stickyConnection = null;
-        }
-        modificationValue.incrementAndGet();
+      this.autoCommit = autoCommit;
+      autoCommitModificationCount++;
+      if (autoCommit) {
+        stickyConnection = null;
       }
     }
   }
@@ -269,18 +277,14 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public void setTransactionIsolation(int level) throws SQLException {
-    synchronized (connections) {
-      if (referenceConnection.getTransactionIsolation() != level) {
-        for (ConnectionHolder ch : connections) {
-          ch.connection.setTransactionIsolation(level);
-        }
-      }
-    }
+    // maintained locally and set lazily as delegate connections are returned
+    transactionIsolationLevel = level;
+    transactionIsolationLevelModificationCount++;
   }
 
   @Override
   public int getTransactionIsolation() throws SQLException {
-    return referenceConnection.getTransactionIsolation();
+    return transactionIsolationLevel;
   }
 
   @Override
@@ -542,22 +546,30 @@ public class DelegatingAuroraConnection implements Connection {
 
   protected static class ConnectionHolder {
     protected final Connection connection;
-    protected int modificationValue = 0;
+    private short readOnlyModificationCount;
+    private short autoCommitModificationCount;
+    private short isolationLevelModificationCount;
 
-    public ConnectionHolder(Connection connection) {
+    public ConnectionHolder(Connection connection) throws SQLException {
       this.connection = connection;
+      
+      readOnlyModificationCount = 0;
+      autoCommitModificationCount = 0;
+      isolationLevelModificationCount = 0;
     }
 
     public Connection updateConnectionStateAndReturn(DelegatingAuroraConnection connectionState) throws SQLException {
-      int expectedValue = connectionState.modificationValue.get();
-      if (modificationValue != expectedValue) {
-        if (connection.isReadOnly() != connectionState.readOnly) {
-          connection.setReadOnly(connectionState.readOnly);
-        }
-        if (connection.getAutoCommit() != connectionState.autoCommit) {
-          connection.setAutoCommit(connectionState.autoCommit);
-        }
-        modificationValue = expectedValue;
+      if (readOnlyModificationCount!= connectionState.readOnlyModificationCount) {
+        readOnlyModificationCount = connectionState.readOnlyModificationCount;
+        connection.setReadOnly(connectionState.readOnly);
+      }
+      if (autoCommitModificationCount != connectionState.autoCommitModificationCount) {
+        autoCommitModificationCount = connectionState.autoCommitModificationCount;
+        connection.setAutoCommit(connectionState.autoCommit);
+      }
+      if (isolationLevelModificationCount != connectionState.transactionIsolationLevelModificationCount) {
+        isolationLevelModificationCount = connectionState.transactionIsolationLevelModificationCount;
+        connection.setTransactionIsolation(connectionState.transactionIsolationLevel);
       }
 
       return connection;
