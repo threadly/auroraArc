@@ -22,6 +22,7 @@ import java.util.Properties;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.threadly.db.aurora.DelegatingAuroraConnection.ConnectionStateManager.ConnectionHolder;
 import org.threadly.util.Clock;
 import org.threadly.util.Pair;
 
@@ -35,29 +36,13 @@ public class DelegatingAuroraConnection implements Connection {
   // TODO - Updates to connections are synchronized on connections
   //        We should figure out a better way to handle this, particularly for frequent operations
   //        like setting auto commit (maybe set locally and checked at delegate lookup time?)
+  private final ConnectionStateManager connectionStateManager;
   private final ConnectionHolder[] connections;
   private final AuroraServer[] servers;
   private final Connection referenceConnection; // also stored in map, just used to global settings
   private final AuroraClusterMonitor clusterMonitor;
   private final AtomicBoolean closed;
   private volatile Pair<AuroraServer, ConnectionHolder> stickyConnection;
-  // state bellow is stored locally and set lazily on delegate connections
-  private volatile boolean readOnly;
-  private volatile boolean autoCommit;
-  private volatile int transactionIsolationLevel;
-  /* modification values are volatile, parallel missed updates would not be a problem since this is 
-   * only to determine if a change has occurred since the last check (which would not get lost, also 
-   * not to mention parallel updates occurring is almost impossibly low odds).
-   *
-   * These values can overflow without concern as well.
-   * 
-   * In concept, we could track the last known state and only update the delegate connection
-   * if it has changed.  However in an attempt to modify behavior to the delegate connections as 
-   * little as possible we will forward requests that we might have otherwise thought were useless.
-   */
-  private volatile short readOnlyModificationCount = 0;
-  private volatile short autoCommitModificationCount = 0;
-  private volatile short transactionIsolationLevelModificationCount = 0;
 
   public DelegatingAuroraConnection(String url, Properties info) throws SQLException {
     int endDelim = url.indexOf('/', URL_PREFIX.length());
@@ -72,6 +57,13 @@ public class DelegatingAuroraConnection implements Connection {
     if (servers.length == 0) {
       throw new IllegalArgumentException("Invalid URL: " + url);
     }
+    
+    if (urlArgs.contains("optimizedStateUpdates=true")) {
+      connectionStateManager = new OptimizedConnectionStateManager();
+    } else {
+      connectionStateManager = new SafeConnectionStateManager();
+    }
+    
     Map<AuroraServer, ConnectionHolder> connections = new HashMap<>();
     ConnectionHolder firstConnectionHolder = null;
     // if we have an error connecting we still build the map (with empty values) so we can alert
@@ -84,7 +76,7 @@ public class DelegatingAuroraConnection implements Connection {
       }
       try {
         connections.put(auroraServer,
-                        connectException != null ? null : new ConnectionHolder(DelegateDriver.connect(s + urlArgs, info)));
+                        connectException != null ? null : connectionStateManager.wrapConnection(DelegateDriver.connect(s + urlArgs, info)));
       } catch (SQLException e) {
         connectException = new Pair<>(auroraServer, e);
       }
@@ -94,7 +86,7 @@ public class DelegatingAuroraConnection implements Connection {
     }
     this.connections = connections.values().toArray(new ConnectionHolder[connections.size()]);
     this.servers = connections.keySet().toArray(new AuroraServer[connections.size()]);
-    referenceConnection = firstConnectionHolder.connection;
+    referenceConnection = firstConnectionHolder.uncheckedState();
     clusterMonitor = AuroraClusterMonitor.getMonitor(connections.keySet());
     if (connectException != null) {
       clusterMonitor.expediteServerCheck(connectException.getLeft());
@@ -102,9 +94,6 @@ public class DelegatingAuroraConnection implements Connection {
     }
     closed = new AtomicBoolean();
     stickyConnection = null;
-    readOnly = referenceConnection.isReadOnly();
-    autoCommit = referenceConnection.getAutoCommit();
-    transactionIsolationLevel = referenceConnection.getTransactionIsolation();
   }
   
   @Override
@@ -118,7 +107,7 @@ public class DelegatingAuroraConnection implements Connection {
     if (closed.compareAndSet(false, true)) {
       synchronized (connections) {
         for (ConnectionHolder ch : connections) {
-          ch.connection.close();
+          ch.uncheckedState().close();
         }
       }
     }
@@ -131,20 +120,18 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public void setReadOnly(boolean readOnly) throws SQLException {
-    // maintained locally and set lazily as delegate connections are returned
-    this.readOnly = readOnly;
-    readOnlyModificationCount++;
+    connectionStateManager.setReadOnly(readOnly);
   }
 
   @Override
   public boolean isReadOnly() {
-    return readOnly;
+    return connectionStateManager.isReadOnly();
   }
 
   protected <T> T processOnDelegate(SQLOperation<T> action) throws SQLException {
     Pair<AuroraServer, ConnectionHolder> p = getDelegate();
     try {
-      return action.run(p.getRight().updateConnectionStateAndReturn(this));
+      return action.run(p.getRight().verifiedState());
     } catch (SQLException e) {
       clusterMonitor.expediteServerCheck(p.getLeft());
       throw e;
@@ -162,7 +149,7 @@ public class DelegatingAuroraConnection implements Connection {
       }
 
       AuroraServer server;
-      if (readOnly) {
+      if (connectionStateManager.isReadOnly()) {
         server = clusterMonitor.getRandomReadReplica();
         if (server == null) {
           server = clusterMonitor.getCurrentMaster();
@@ -181,7 +168,7 @@ public class DelegatingAuroraConnection implements Connection {
       for (int i = 0; i < servers.length; i++) {
         if (servers[i].equals(server)) {
           Pair<AuroraServer, ConnectionHolder> result = new Pair<>(server, connections[i]);
-          if (! autoCommit) {
+          if (! connectionStateManager.isAutoCommit()) {
             stickyConnection = result;
           }
           return result;
@@ -215,8 +202,7 @@ public class DelegatingAuroraConnection implements Connection {
   public void setAutoCommit(boolean autoCommit) throws SQLException {
     // maintained locally and set lazily as delegate connections are returned
     synchronized (this) {
-      this.autoCommit = autoCommit;
-      autoCommitModificationCount++;
+      connectionStateManager.setAutoCommit(autoCommit);
       if (autoCommit) {
         stickyConnection = null;
       }
@@ -225,7 +211,7 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public boolean getAutoCommit() throws SQLException {
-    return autoCommit;
+    return connectionStateManager.isAutoCommit();
   }
 
   @Override
@@ -263,7 +249,7 @@ public class DelegatingAuroraConnection implements Connection {
       if ((referenceConnection.getCatalog() == null && catalog != null) ||
           ! referenceConnection.getCatalog().equals(catalog)) {
         for (ConnectionHolder ch : connections) {
-          ch.connection.setCatalog(catalog);
+          ch.uncheckedState().setCatalog(catalog);
         }
       }
     }
@@ -276,21 +262,19 @@ public class DelegatingAuroraConnection implements Connection {
 
   @Override
   public void setTransactionIsolation(int level) throws SQLException {
-    // maintained locally and set lazily as delegate connections are returned
-    transactionIsolationLevel = level;
-    transactionIsolationLevelModificationCount++;
+    connectionStateManager.setTransactionIsolationLevel(level);
   }
 
   @Override
   public int getTransactionIsolation() throws SQLException {
-    return transactionIsolationLevel;
+    return connectionStateManager.getTransactionIsolationLevel();
   }
 
   @Override
   public SQLWarning getWarnings() throws SQLException {
     SQLWarning result = null;
     for (ConnectionHolder ch : connections) {
-      SQLWarning conWarnings = ch.connection.getWarnings();
+      SQLWarning conWarnings = ch.uncheckedState().getWarnings();
       if (conWarnings != null) {
         if (result == null) {
           result = conWarnings;
@@ -305,7 +289,7 @@ public class DelegatingAuroraConnection implements Connection {
   @Override
   public void clearWarnings() throws SQLException {
     for (ConnectionHolder ch : connections) {
-      ch.connection.clearWarnings();
+      ch.uncheckedState().clearWarnings();
     }
   }
 
@@ -318,7 +302,7 @@ public class DelegatingAuroraConnection implements Connection {
   public void setTypeMap(Map<String, Class<?>> map) throws SQLException {
     synchronized (connections) {
       for (ConnectionHolder ch : connections) {
-        ch.connection.setTypeMap(map);
+        ch.uncheckedState().setTypeMap(map);
       }
     }
   }
@@ -328,7 +312,7 @@ public class DelegatingAuroraConnection implements Connection {
     synchronized (connections) {
       if (referenceConnection.getHoldability() != holdability) {
         for (ConnectionHolder ch : connections) {
-          ch.connection.setHoldability(holdability);
+          ch.uncheckedState().setHoldability(holdability);
         }
       }
     }
@@ -453,7 +437,7 @@ public class DelegatingAuroraConnection implements Connection {
           return false;
         }
       }
-      if (! ch.connection.isValid(remainingTimeout)) {
+      if (! ch.uncheckedState().isValid(remainingTimeout)) {
         return false;
       }
     }
@@ -464,7 +448,7 @@ public class DelegatingAuroraConnection implements Connection {
   public void setClientInfo(String name, String value) throws SQLClientInfoException {
     synchronized (connections) {
       for (ConnectionHolder ch : connections) {
-        ch.connection.setClientInfo(name, value);
+        ch.uncheckedState().setClientInfo(name, value);
       }
     }
   }
@@ -473,7 +457,7 @@ public class DelegatingAuroraConnection implements Connection {
   public void setClientInfo(Properties properties) throws SQLClientInfoException {
     synchronized (connections) {
       for (ConnectionHolder ch : connections) {
-        ch.connection.setClientInfo(properties);
+        ch.uncheckedState().setClientInfo(properties);
       }
     }
   }
@@ -504,7 +488,7 @@ public class DelegatingAuroraConnection implements Connection {
       if ((referenceConnection.getSchema() == null && schema != null) ||
           ! referenceConnection.getSchema().equals(schema)) {
         for (ConnectionHolder ch : connections) {
-          ch.connection.setSchema(schema);
+          ch.uncheckedState().setSchema(schema);
         }
       }
     }
@@ -520,7 +504,7 @@ public class DelegatingAuroraConnection implements Connection {
     synchronized (connections) {
       closed.set(true);
       for (ConnectionHolder ch : connections) {
-        ch.connection.abort(executor);
+        ch.uncheckedState().abort(executor);
       }
     }
   }
@@ -529,7 +513,7 @@ public class DelegatingAuroraConnection implements Connection {
   public void setNetworkTimeout(Executor executor, int milliseconds) throws SQLException {
     synchronized (connections) {
       for (ConnectionHolder ch : connections) {
-        ch.connection.setNetworkTimeout(executor, milliseconds);
+        ch.uncheckedState().setNetworkTimeout(executor, milliseconds);
       }
     }
   }
@@ -542,36 +526,189 @@ public class DelegatingAuroraConnection implements Connection {
   protected interface SQLOperation<T> {
     public T run(Connection connection) throws SQLException;
   }
+  
+  /**
+   * Class for maintaining state which is maintained and only updated lazily when the wrapped 
+   * {@link ConnectionHolder#verifiedState()} is invoked.
+   */
+  protected static abstract class ConnectionStateManager {
+    // state bellow is stored locally and set lazily on delegate connections
+    protected volatile boolean readOnly;
+    protected volatile boolean autoCommit;
+    protected volatile int transactionIsolationLevel = Integer.MIN_VALUE; // used to indicate not initialized
 
-  protected static class ConnectionHolder {
-    protected final Connection connection;
-    private short readOnlyModificationCount;
-    private short autoCommitModificationCount;
-    private short isolationLevelModificationCount;
-
-    public ConnectionHolder(Connection connection) throws SQLException {
-      this.connection = connection;
-      
-      readOnlyModificationCount = 0;
-      autoCommitModificationCount = 0;
-      isolationLevelModificationCount = 0;
+    public void setReadOnly(boolean readOnly) {
+      this.readOnly = readOnly;
+    }
+    
+    public boolean isReadOnly() {
+      return readOnly;
     }
 
-    public Connection updateConnectionStateAndReturn(DelegatingAuroraConnection connectionState) throws SQLException {
-      if (readOnlyModificationCount!= connectionState.readOnlyModificationCount) {
-        readOnlyModificationCount = connectionState.readOnlyModificationCount;
-        connection.setReadOnly(connectionState.readOnly);
+    public void setAutoCommit(boolean autoCommit) {
+      this.autoCommit = autoCommit;
+    }
+
+    public boolean isAutoCommit() {
+      return autoCommit;
+    }
+
+    public void setTransactionIsolationLevel(int level) {
+      transactionIsolationLevel = level;
+    }
+
+    public int getTransactionIsolationLevel() {
+      return transactionIsolationLevel;
+    }
+    
+    public ConnectionHolder wrapConnection(Connection connection) throws SQLException {
+      if (transactionIsolationLevel == Integer.MIN_VALUE) {
+        // startup state from first connection we see
+        readOnly = connection.isReadOnly();
+        autoCommit = connection.getAutoCommit();
+        transactionIsolationLevel = connection.getTransactionIsolation();
       }
-      if (autoCommitModificationCount != connectionState.autoCommitModificationCount) {
-        autoCommitModificationCount = connectionState.autoCommitModificationCount;
-        connection.setAutoCommit(connectionState.autoCommit);
+      return makeConnectionHolder(connection);
+    }
+    
+    protected abstract ConnectionHolder makeConnectionHolder(Connection connection);
+    
+    public static abstract class ConnectionHolder {
+      protected final Connection connection;
+
+      public ConnectionHolder(Connection connection) {
+        this.connection = connection;
       }
-      if (isolationLevelModificationCount != connectionState.transactionIsolationLevelModificationCount) {
-        isolationLevelModificationCount = connectionState.transactionIsolationLevelModificationCount;
-        connection.setTransactionIsolation(connectionState.transactionIsolationLevel);
+      
+      public Connection uncheckedState() {
+        return connection;
       }
 
-      return connection;
+      public abstract Connection verifiedState() throws SQLException;
+    }
+  }
+  
+  /**
+   * This state manager attempts to modify the delegated state update behavior as little as 
+   * reasonably possible.  This means that even if the state has not updated, but which our 
+   * connection has been invoked with an update to that state.  Or if it was updated to a different 
+   * state, then updated back to the original state before use.  In both cases we will still forward 
+   * these updates to the delegate connection.
+   * <p>
+   * This is currently considered the safer option because we modify the behavior less.  However 
+   * the {@link OptimizedConnectionStateManager} provides an implementation to try and both reduce 
+   * the forwarded updates, as well as overhead in tracking update practices.
+   */
+  protected static class SafeConnectionStateManager extends ConnectionStateManager {
+    /* modification values are volatile, parallel missed updates would not be a problem since this is 
+     * only to determine if a change has occurred since the last check (which would not get lost, also 
+     * not to mention parallel updates occurring is almost impossibly low odds).
+     *
+     * These values can overflow without concern as well.
+     * 
+     * In concept, we could track the last known state and only update the delegate connection
+     * if it has changed.  However in an attempt to modify behavior to the delegate connections as 
+     * little as possible we will forward requests that we might have otherwise thought were useless.
+     */
+    private volatile int readOnlyModificationCount = 0;
+    private volatile int autoCommitModificationCount = 0;
+    private volatile int transactionIsolationLevelModificationCount = 0;
+
+    @Override
+    public void setReadOnly(boolean readOnly) {
+      super.setReadOnly(readOnly);
+      readOnlyModificationCount++;
+    }
+
+    public void setAutoCommit(boolean autoCommit) {
+      super.setAutoCommit(autoCommit);
+      autoCommitModificationCount++;
+    }
+
+    @Override
+    public void setTransactionIsolationLevel(int level) {
+      super.setTransactionIsolationLevel(level);
+      transactionIsolationLevelModificationCount++;
+    }
+
+    @Override
+    protected ConnectionHolder makeConnectionHolder(Connection connection) {
+      return new SafeConnectionHolder(connection);
+    }
+
+    protected class SafeConnectionHolder extends ConnectionHolder {
+      private int connectionReadOnlyModificationCount;
+      private int connectionAutoCommitModificationCount;
+      private int connectionIsolationLevelModificationCount;
+
+      public SafeConnectionHolder(Connection connection) {
+        super(connection);
+        
+        connectionReadOnlyModificationCount = readOnlyModificationCount;
+        connectionAutoCommitModificationCount = autoCommitModificationCount;
+        connectionIsolationLevelModificationCount = transactionIsolationLevelModificationCount;
+      }
+
+      public Connection verifiedState() throws SQLException {
+        if (connectionReadOnlyModificationCount != readOnlyModificationCount) {
+          connectionReadOnlyModificationCount = readOnlyModificationCount;
+          connection.setReadOnly(readOnly);
+        }
+        if (connectionAutoCommitModificationCount != autoCommitModificationCount) {
+          connectionAutoCommitModificationCount = autoCommitModificationCount;
+          connection.setAutoCommit(autoCommit);
+        }
+        if (connectionIsolationLevelModificationCount != transactionIsolationLevelModificationCount) {
+          connectionIsolationLevelModificationCount = transactionIsolationLevelModificationCount;
+          connection.setTransactionIsolation(transactionIsolationLevel);
+        }
+
+        return connection;
+      }
+    }
+  }
+  
+  /**
+   * This state manager attempts to do the bare minimum to ensure that the connects state is 
+   * communicated to the back end connection states.  It makes heavy assumptions that state updates 
+   * can not occur outside of this state manager.
+   */
+  protected static class OptimizedConnectionStateManager extends ConnectionStateManager {
+    @Override
+    protected ConnectionHolder makeConnectionHolder(Connection connection) {
+      return new OptimizedConnectionHolder(connection);
+    }
+
+    protected class OptimizedConnectionHolder extends ConnectionHolder {
+      private boolean connectionReadOnly;
+      private boolean connectionAutoCommit;
+      private int connectionTransactionIsolationLevel;
+  
+      public OptimizedConnectionHolder(Connection connection) {
+        super(connection);
+        
+        connectionReadOnly = readOnly;
+        connectionAutoCommit = autoCommit;
+        connectionTransactionIsolationLevel = transactionIsolationLevel;
+      }
+
+      @Override
+      public Connection verifiedState() throws SQLException {
+        if (connectionReadOnly != readOnly) {
+          connectionReadOnly = readOnly;
+          connection.setReadOnly(readOnly);
+        }
+        if (connectionAutoCommit != autoCommit) {
+          connectionAutoCommit = autoCommit;
+          connection.setAutoCommit(autoCommit);
+        }
+        if (connectionTransactionIsolationLevel != transactionIsolationLevel) {
+          connectionTransactionIsolationLevel = transactionIsolationLevel;
+          connection.setTransactionIsolation(transactionIsolationLevel);
+        }
+  
+        return connection;
+      }
     }
   }
 }

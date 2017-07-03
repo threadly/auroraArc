@@ -36,9 +36,9 @@ public class DriverLocalDbLoadTest extends DriverLocalDbTest {
   }
 
   @Test
-  public void a1_insertRecordInterfaceTransactionAndCountVerification() {
+  public void a1_insertRecordInterfaceTransactionAndCount() {
     for (int i = 0; i < RUN_COUNT_REFERENCE / 2; i++) {
-      super.a1_insertRecordInterfaceTransactionAndCountVerification();
+      super.a1_insertRecordInterfaceTransactionAndCount();
     }
   }
 

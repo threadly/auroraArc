@@ -28,6 +28,7 @@ import org.skife.jdbi.v2.sqlobject.customizers.RegisterMapper;
 import org.skife.jdbi.v2.sqlobject.mixins.Transactional;
 import org.skife.jdbi.v2.tweak.ResultSetMapper;
 import org.threadly.concurrent.UnfairExecutor;
+import org.threadly.db.LoggingDriver;
 import org.threadly.util.Clock;
 import org.threadly.util.Pair;
 import org.threadly.util.StringUtils;
@@ -35,13 +36,22 @@ import org.threadly.util.SuppressedStackRuntimeException;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING) // tests prefixed `a|z[0-9]_` to set order where it matters
 public class DriverLocalDbTest {
+  private static final boolean LOGGING_DRIVER = false;
+  private static final boolean OPTIMIZED_DRIVER = true;
   protected static DBI DBI;
 
   @BeforeClass
   public static void setupClass() throws ClassNotFoundException {
-    Class.forName(Driver.class.getName());
-    DBI = new DBI("jdbc:mysql:aurora://127.0.0.1:3306,127.0.0.2:3306,127.0.0.3:3306,127.0.0.4:3306/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC",
-                      "auroraArc", "");
+    if (LOGGING_DRIVER) {
+      LoggingDriver.registerDriver();
+    } else {
+      Driver.registerDriver();
+    }
+    DBI = new DBI("jdbc:mysql:" + (LOGGING_DRIVER ? "logging" : "aurora") + "://" +  
+                    "127.0.0.1:3306,127.0.0.2:3306,127.0.0.3:3306,127.0.0.4:3306" + 
+                    "/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC" + 
+                    (OPTIMIZED_DRIVER ? "&optimizedStateUpdates=true" : ""),
+                  "auroraArc", "");
   }
   
   protected JdbiDao dao;
