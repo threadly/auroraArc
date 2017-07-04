@@ -76,13 +76,11 @@ public class AuroraClusterMonitor {
                                                                     CHECK_FREQUENCY_MILLIS, s));
   }
 
-  protected final PrioritySchedulerService scheduler;
   protected final ClusterChecker clusterStateChecker;
   private final AtomicLong replicaIndex;  // used to distribute replica reads
 
   protected AuroraClusterMonitor(PrioritySchedulerService scheduler, long checkIntervalMillis,
                                  Set<AuroraServer> clusterServers) {
-    this.scheduler = scheduler;
     clusterStateChecker = new ClusterChecker(scheduler, checkIntervalMillis, clusterServers);
     replicaIndex = new AtomicLong();
   }
@@ -134,7 +132,8 @@ public class AuroraClusterMonitor {
    * concurrently, and also ensure that we always check the state after modifications have finished
    * (and thus will witness the final cluster state).
    */
-  protected class ClusterChecker extends ReschedulingOperation {
+  protected static class ClusterChecker extends ReschedulingOperation {
+    protected final PrioritySchedulerService scheduler;
     protected final Map<AuroraServer, ServerMonitor> allServers;
     protected final List<AuroraServer> secondaryServers;
     protected final AtomicReference<AuroraServer> masterServer;
@@ -145,6 +144,7 @@ public class AuroraClusterMonitor {
                              Set<AuroraServer> clusterServers) {
       super(scheduler, 0);
 
+      this.scheduler = scheduler;
       allServers = new HashMap<>();
       secondaryServers = new CopyOnWriteArrayList<>();
       serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
@@ -181,6 +181,20 @@ public class AuroraClusterMonitor {
       signalToRun();
     }
 
+    // used in testing
+    protected ClusterChecker(PrioritySchedulerService scheduler, long checkIntervalMillis,
+                             Map<AuroraServer, ServerMonitor> clusterServers) {
+      super(scheduler, 0);
+
+      this.scheduler = scheduler;
+      allServers = clusterServers;
+      secondaryServers = new CopyOnWriteArrayList<>();
+      serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
+      masterServer = new AtomicReference<>();
+
+      initialized = true;
+    }
+
     protected void expediteServerCheck(ServerMonitor serverMonitor) {
       // check is not exactly thread safe, but will stop the worst of it
       if (! serversWaitingExpeditiedCheck.contains(serverMonitor.server)) {
@@ -193,7 +207,7 @@ public class AuroraClusterMonitor {
     }
 
     public void expediteServerCheck(AuroraServer auroraServer) {
-      ServerMonitor monitor = clusterStateChecker.allServers.get(auroraServer);
+      ServerMonitor monitor = allServers.get(auroraServer);
       if (monitor != null) {
         expediteServerCheck(monitor);
       }
@@ -252,11 +266,11 @@ public class AuroraClusterMonitor {
    */
   protected static class ServerMonitor implements Runnable {
     protected final AuroraServer server;
-    private final ReschedulingOperation clusterStateChecker;
-    private final AtomicBoolean running;
-    private Connection serverConnection;
-    private volatile Throwable lastError;
-    private volatile boolean readOnly;
+    protected final ReschedulingOperation clusterStateChecker;
+    protected final AtomicBoolean running;
+    protected Connection serverConnection;
+    protected volatile Throwable lastError;
+    protected volatile boolean readOnly;
 
     protected ServerMonitor(AuroraServer server, ReschedulingOperation clusterStateChecker) {
       this.server = server;

@@ -62,7 +62,7 @@ public class DelegatingAuroraConnection implements Connection {
    * 
    * @param url Servers and connect properties to connect to
    * @param info Info properties
-   * @throws SQLException
+   * @throws SQLException Thrown if issue in establishing delegate connections
    */
   public DelegatingAuroraConnection(String url, Properties info) throws SQLException {
     int endDelim = url.indexOf('/', URL_PREFIX.length());
