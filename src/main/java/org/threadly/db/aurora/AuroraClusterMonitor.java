@@ -4,8 +4,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +40,7 @@ public class AuroraClusterMonitor {
   protected static final int MINIMUM_THREAD_POOL_SIZE = 4;
   protected static final int MAXIMUM_THREAD_POOL_SIZE = 32;
   protected static final PrioritySchedulerService MONITOR_SCHEDULER;
-  protected static final ConcurrentMap<List<AuroraServer>, AuroraClusterMonitor> MONITORS;
+  protected static final ConcurrentMap<Set<AuroraServer>, AuroraClusterMonitor> MONITORS;
 
   static {
     PriorityScheduler ps =
@@ -64,17 +62,18 @@ public class AuroraClusterMonitor {
    * @return Monitor to select healthy and well balanced cluster servers
    */
   public static AuroraClusterMonitor getMonitor(Set<AuroraServer> servers) {
+    // the implementation of `AbstractSet`'s equals will verify the size, followed by `containsAll`.
+    // Since order and other variations should not impact the lookup we just store the provided set 
+    // into the map directly for efficency when the same set is provided multiple times
+    
     AuroraClusterMonitor result = MONITORS.get(servers);
     if (result != null) {
       return result;
     }
-    // must sort servers to ensure list comparison is deterministic
-    List<AuroraServer> sortedServers = new ArrayList<>(servers);
-    Collections.sort(sortedServers);
-
-    return MONITORS.computeIfAbsent(sortedServers,
+    
+    return MONITORS.computeIfAbsent(servers,
                                     (s) -> new AuroraClusterMonitor(MONITOR_SCHEDULER,
-                                                                    CHECK_FREQUENCY_MILLIS, servers));
+                                                                    CHECK_FREQUENCY_MILLIS, s));
   }
 
   protected final PrioritySchedulerService scheduler;

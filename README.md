@@ -15,7 +15,6 @@ Looking towards the future, it should be easy to allow other drivers to be used 
 ## TODO:
 * It might make sense for our delegating connection to try and conceal errors and reconnection individual connections rather than have the pool reproduce them all (which thus invalidates and restablishes to the still healthy servers after a failover).
 * Optimizations in DelegatingAuroraConnection around locking
-* Optimizations in AuroraClusterMonitor.getMonitor for picking the monitor set
 * Discover all cluster hosts from a cluster URL rather than requiring all to be specified
 * Add configuration capabilities (for example poll rate against cluster servers)
 * Allow aribtrary delegate drivers
