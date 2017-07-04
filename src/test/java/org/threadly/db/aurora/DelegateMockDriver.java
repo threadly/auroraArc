@@ -4,6 +4,8 @@ import static org.mockito.Mockito.*;
 
 import java.sql.Connection;
 import java.sql.DriverPropertyInfo;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.HashMap;
@@ -33,6 +35,20 @@ public class DelegateMockDriver {
       Connection mockConnection = mockConnections.get(host);
       if (mockConnection == null) {
         mockConnection = mock(Connection.class);
+        
+        // mock out the behavior for secondary check
+        try {
+          PreparedStatement mockStatement = mock(PreparedStatement.class);
+          ResultSet mockResultSet = mock(ResultSet.class);
+          when(mockStatement.executeQuery()).thenReturn(mockResultSet);
+          when(mockResultSet.getString("Value")).thenReturn("ON");  // all servers are read only
+          
+          when(mockConnection.prepareStatement("SHOW GLOBAL VARIABLES LIKE 'innodb_read_only';"))
+            .thenReturn(mockStatement);
+        } catch (SQLException e) {
+          // not possible
+        }
+        
         mockConnections.put(host, mockConnection);
       }
       return mockConnection;
