@@ -104,14 +104,14 @@ public class DelegatingAuroraConnection implements Connection {
         firstConnectionHolder = connections.get(auroraServer);
       }
     }
-    this.connections = connections.values().toArray(new ConnectionHolder[connections.size()]);
-    this.servers = connections.keySet().toArray(new AuroraServer[connections.size()]);
-    referenceConnection = firstConnectionHolder.uncheckedState();
     clusterMonitor = AuroraClusterMonitor.getMonitor(connections.keySet());
     if (connectException != null) {
       clusterMonitor.expediteServerCheck(connectException.getLeft());
       throw connectException.getRight();
     }
+    this.connections = connections.values().toArray(new ConnectionHolder[connections.size()]);
+    this.servers = connections.keySet().toArray(new AuroraServer[connections.size()]);
+    referenceConnection = firstConnectionHolder.uncheckedState();
     closed = new AtomicBoolean();
     stickyConnection = null;
   }
@@ -660,6 +660,7 @@ public class DelegatingAuroraConnection implements Connection {
       readOnlyModificationCount++;
     }
 
+    @Override
     public void setAutoCommit(boolean autoCommit) {
       super.setAutoCommit(autoCommit);
       autoCommitModificationCount++;
@@ -693,6 +694,7 @@ public class DelegatingAuroraConnection implements Connection {
         connectionIsolationLevelModificationCount = transactionIsolationLevelModificationCount;
       }
 
+      @Override
       public Connection verifiedState() throws SQLException {
         if (connectionReadOnlyModificationCount != readOnlyModificationCount) {
           connectionReadOnlyModificationCount = readOnlyModificationCount;
