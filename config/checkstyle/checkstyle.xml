@@ -58,7 +58,12 @@
     <module name="ParameterNumber">
       <property name="max" value="10"/>
     </module>
-    <module name="MethodCount"/>
+    <module name="MethodCount">
+      <property name="maxPrivate" value="200"/>
+      <property name="maxProtected" value="200"/>
+      <property name="maxPublic" value="200"/>
+      <property name="maxTotal" value="200"/>
+    </module>
     <module name="GenericWhitespace"/>
     <module name="EmptyForInitializerPad"/>
     <module name="EmptyForIteratorPad"/>
