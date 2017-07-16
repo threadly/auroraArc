@@ -3,6 +3,10 @@ This project is in extremely early phases (though may be usable).  Unless intere
 
 The goal is to provide a fault tollerant, and high performance, driver for AWS's Aurora servers.  The driver is designed to be small and light weight, with minimal external dependencies.
 
+## How stable is it?
+
+This is still a work in progress.  Like most open source projects this project is use at your own risk.  The 0.1 release will indicate a point of some initial stability, typically against JDBI / HikariCP / manual use.  Use in other tools are more likely to uncover unexpected behavior.  If there is a specific tooling configuration you would like tested or are curious about please open an issue.
+
 ## How it works
 This project currently works by having each aurora "Connection" actually be a management layer which under the hood is selecting the connection to the actual aurora host to be used.  The primary reason for this is we can then depend on the normal, and battle tested, MySQL jdbc connector (in the future we may allow any delegated driver to be used).  Resulting in the primary concern of this driver to become when we can change the underline connection, and which connection to select to distribute load across the cluster evenly.
 
