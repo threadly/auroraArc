@@ -16,10 +16,10 @@ public class AuroraServer implements Comparable<AuroraServer> {
   public AuroraServer(String server, Properties info) {
     int delim = server.indexOf(':');
     if (delim > 0) {
-      host = server.substring(0, delim).toLowerCase().intern();
+      host = server.substring(0, delim).intern();
       port = Integer.parseInt(server.substring(delim + 1));
     } else {
-      host = server.toLowerCase().intern();
+      host = server.intern();
       port = DEFAULT_PORT;
     }
     this.info = info; // not currently considered in equality or hash
@@ -28,7 +28,7 @@ public class AuroraServer implements Comparable<AuroraServer> {
   }
 
   public AuroraServer(String host, int port, Properties info) {
-    this.host = host;
+    this.host = host.intern();
     this.port = port;
     this.info = info; // not currently considered in equality or hash
 

@@ -16,6 +16,7 @@ import java.util.logging.Logger;
 import org.threadly.db.AbstractArcDriver;
 
 public class DelegateMockDriver {
+  public static final String MASTER_HOST = "masterHost";
   private static final java.sql.Driver ORIGINAL_DELEGATE_DRIVER = DelegateDriver.delegateDriver;
 
   public static MockDriver setupMockDriverAsDelegate() {
@@ -41,7 +42,12 @@ public class DelegateMockDriver {
           PreparedStatement mockStatement = mock(PreparedStatement.class);
           ResultSet mockResultSet = mock(ResultSet.class);
           when(mockStatement.executeQuery()).thenReturn(mockResultSet);
-          when(mockResultSet.getString("Value")).thenReturn("ON");  // all servers are read only
+          when(mockResultSet.next()).thenReturn(true);
+          if (MASTER_HOST.equalsIgnoreCase(host)) {
+            when(mockResultSet.getString("Value")).thenReturn("OFF");
+          } else {
+            when(mockResultSet.getString("Value")).thenReturn("ON");
+          }
           
           when(mockConnection.prepareStatement("SHOW GLOBAL VARIABLES LIKE 'innodb_read_only';"))
             .thenReturn(mockStatement);
