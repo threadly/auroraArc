@@ -21,5 +21,4 @@ Looking towards the future, it should be easy to allow other drivers to be used 
 * Optimizations in DelegatingAuroraConnection around locking
 * Discover all cluster hosts from a cluster URL rather than requiring all to be specified
 * Add configuration capabilities (for example poll rate against cluster servers)
-* Allow aribtrary delegate drivers
 * Allow flexability for any master/slave database setup
