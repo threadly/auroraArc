@@ -14,9 +14,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.threadly.concurrent.ConfigurableThreadFactory;
 import org.threadly.concurrent.PriorityScheduler;
 import org.threadly.concurrent.PrioritySchedulerService;
@@ -34,7 +34,7 @@ import org.threadly.concurrent.TaskPriority;
  * correctly.
  */
 public class AuroraClusterMonitor {
-  private static final Logger LOG = LoggerFactory.getLogger(AuroraClusterMonitor.class);
+  private static final Logger LOG = Logger.getLogger(AuroraClusterMonitor.class.getSimpleName());
 
   protected static final int CHECK_FREQUENCY_MILLIS = 500;  // TODO - make configurable
   protected static final int MINIMUM_THREAD_POOL_SIZE = 4;
@@ -174,7 +174,7 @@ public class AuroraClusterMonitor {
                                       checkIntervalMillis);
       }
       if (masterServer.get() == null) {
-        LOG.warn("No master server found!  Will use read only servers till one becomes master");
+        LOG.warning("No master server found!  Will use read only servers till one becomes master");
       }
       
       initialized = true;
@@ -337,17 +337,18 @@ public class AuroraClusterMonitor {
               } else if (readOnlyStr.equals("ON")) {
                 currentlyReadOnly = true;
               } else {
-                LOG.error("Unknown db state, may require library upgrade: " + readOnlyStr);
+                LOG.severe("Unknown db state, may require library upgrade: " + readOnlyStr);
               }
             } else {
-              LOG.error("No result looking up db state, likely not connected to Aurora database");
+              LOG.severe("No result looking up db state, likely not connected to Aurora database");
             }
           }
         }
       } catch (Throwable t) {
         currentError = t;
         if (! t.equals(lastError)) {
-          LOG.warn("Setting aurora server " + server + " as unhealthy due to error checking state", t);
+          LOG.log(Level.WARNING,
+                  "Setting aurora server " + server + " as unhealthy due to error checking state", t);
         }
       } finally {
         if (currentlyReadOnly != readOnly || (lastError == null) != (currentError == null)) {
