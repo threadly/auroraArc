@@ -105,20 +105,8 @@ public class ActionLogger {
   @Test
   public void z_lookupRecordsPaged() throws InterruptedException {
     System.out.println("-- STARTING: lookupRecordsPaged --");
-    @SuppressWarnings("unused")
-    int count = 0;
     Iterator<?> it = DAO.lookupAllRecords();
     while (it.hasNext()) {
-      count++;
-      /*if (count % 10 == 0) {
-        if (count % 100 == 0) {
-          // TODO - tune output
-          System.out.println("Reading record: " + count);
-          Thread.sleep(100);
-        } else {
-          Thread.sleep(10);
-        }
-      }*/
       it.next(); // ignore value
     }
   }
@@ -191,7 +179,7 @@ public class ActionLogger {
     @SqlQuery("SELECT * FROM records WHERE created_date < :time")
     public abstract List<Pair<Long, String>> lookupRecordsCreatedBefore(@Bind("time") Timestamp timestamp);
 
-    @FetchSize(100)
+    @FetchSize(Integer.MIN_VALUE)
     @SqlQuery("SELECT * FROM records")
     public abstract ResultIterator<Pair<Long, String>> lookupAllRecords();
 

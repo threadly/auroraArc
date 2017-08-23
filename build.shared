@@ -21,7 +21,7 @@ dependencies {
   )
 
   compile (
-    "org.threadly:threadly:5.2",
+    "org.threadly:threadly:5.3",
     "mysql:mysql-connector-java:6.0.6"
   )
 }

@@ -189,7 +189,7 @@ public class DriverLocalDbTest {
     @SqlQuery("SELECT * FROM records WHERE created_date < :time")
     public abstract List<Pair<Long, String>> lookupRecordsCreatedBefore(@Bind("time") Timestamp timestamp);
 
-    @FetchSize(100)
+    @FetchSize(Integer.MIN_VALUE)
     @SqlQuery("SELECT * FROM records")
     public abstract ResultIterator<Pair<Long, String>> lookupAllRecords();
 

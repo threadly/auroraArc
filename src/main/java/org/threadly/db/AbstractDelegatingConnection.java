@@ -361,7 +361,8 @@ public abstract class AbstractDelegatingConnection implements Connection {
 
     @Override
     public void close() throws SQLException {
-      action((s) -> { s.close(); return null; });
+      // close needs to be processed immediately or it may never run
+      delegate().close();
     }
 
     @Override

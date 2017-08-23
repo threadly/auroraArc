@@ -188,7 +188,7 @@ public class AuroraLoadGenerator {
     @SqlQuery("SELECT * FROM records WHERE id = :id")
     public abstract Pair<Long, String> lookupRecord(@Bind("id") int id);
 
-    @FetchSize(100)
+    @FetchSize(Integer.MIN_VALUE)
     @SqlQuery("SELECT * FROM records")
     public abstract ResultIterator<Pair<Long, String>> lookupAllRecords();
 
