@@ -26,6 +26,7 @@ import org.skife.jdbi.v2.sqlobject.SqlUpdate;
 import org.skife.jdbi.v2.sqlobject.Transaction;
 import org.skife.jdbi.v2.sqlobject.customizers.FetchSize;
 import org.skife.jdbi.v2.sqlobject.customizers.RegisterMapper;
+import org.skife.jdbi.v2.sqlobject.mixins.GetHandle;
 import org.skife.jdbi.v2.sqlobject.mixins.Transactional;
 import org.skife.jdbi.v2.tweak.ResultSetMapper;
 import org.threadly.concurrent.UnfairExecutor;
@@ -101,6 +102,16 @@ public class ActionLogger {
     System.out.println("-- STARTING: lookupSingleRecord --");
     DAO.lookupRecord(1);
   }
+  
+  @Test
+  public void readOnlyHandle() {
+    System.out.println("-- STARTING: readOnlyHandle --");
+    DAO.withHandle((handle) -> {
+      handle.getConnection().setReadOnly(true);
+      handle.getConnection().setReadOnly(false);
+      return null;
+    });
+  }
 
   @Test
   public void z_lookupRecordsPaged() throws InterruptedException {
@@ -156,7 +167,7 @@ public class ActionLogger {
   }
 
   @RegisterMapper(RecordPairMapper.class)
-  public abstract static class JdbiDao implements Transactional<JdbiDao> {
+  public abstract static class JdbiDao implements Transactional<JdbiDao>, GetHandle {
     @SqlUpdate("INSERT INTO records (value, created_date) VALUES (:record, NOW())")
     public abstract void insertRecord(@Bind("record") String record);
 
