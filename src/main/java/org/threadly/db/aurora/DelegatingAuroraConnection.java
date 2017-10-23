@@ -25,8 +25,17 @@ import org.threadly.util.Pair;
  * distribute load if possible, and to handle fail over conditions with minimal impact.
  */
 public class DelegatingAuroraConnection extends AbstractDelegatingConnection implements Connection {
+  /**
+   * Prefix expected to the URL for connections handled by this class.
+   */
   public static final String URL_PREFIX = "jdbc:mysql:aurora://";
 
+  /**
+   * Check if a given URL is accepted by this connection.
+   * 
+   * @param url URL to test
+   * @return {@code true} if this connection is able to handled the provided url
+   */
   public static boolean acceptsURL(String url) {
     return url != null && url.startsWith(DelegatingAuroraConnection.URL_PREFIX);
   }
@@ -55,8 +64,6 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    * @throws SQLException Thrown if issue in establishing delegate connections
    */
   public DelegatingAuroraConnection(String url, Properties info) throws SQLException {
-    super(url.contains("delayConnectionChoice=true"));
-    
     int endDelim = url.indexOf('/', URL_PREFIX.length());
     if (endDelim < 0) {
       throw new IllegalArgumentException("Invalid URL: " + url);

@@ -35,17 +35,11 @@ import java.util.Properties;
 /**
  * Abstract implementation which tries to delegate actions to a contained connection.  This 
  * additionally tries to select the delegated connection at the last possible moment.  As much as 
- * possible the logic for when a delegated connection needs to be roated out is also done here.
+ * possible the logic for when a delegated connection needs to be rotated out is also done here.
  * <p>
  * This class is not very useful outside of Threadly developers.
  */
 public abstract class AbstractDelegatingConnection implements Connection {
-  private final boolean delayConnectionChoice;
-  
-  public AbstractDelegatingConnection(boolean delayConnectionChoice) {
-    this.delayConnectionChoice = delayConnectionChoice;
-  }
-  
   protected abstract <R> R processOnDelegate(SQLOperation<Connection, R> action) throws SQLException;
   
   protected abstract Connection getReferenceConnection();
@@ -292,13 +286,15 @@ public abstract class AbstractDelegatingConnection implements Connection {
     
     // used whenever there is a result needed
     protected ST delegate() throws SQLException {
-      if (delegateStatement == null) {
-        delegateStatement = processOnDelegate(delegateStatementProvider());
-        if (queuedStatementActions != null) {
-          for (SQLOperation<ST, Void> o : queuedStatementActions) {
-            o.run(delegateStatement);
+      synchronized (this) { // TODO - improve performance
+        if (delegateStatement == null) {
+          delegateStatement = processOnDelegate(delegateStatementProvider());
+          if (queuedStatementActions != null) {
+            for (SQLOperation<ST, Void> o : queuedStatementActions) {
+              o.run(delegateStatement);
+            }
+            queuedStatementActions = null;
           }
-          queuedStatementActions = null;
         }
       }
       
@@ -307,13 +303,15 @@ public abstract class AbstractDelegatingConnection implements Connection {
 
     // used when there is no result, and thus the action may be delayed
     protected void action(SQLOperation<ST, Void> action) throws SQLException {
-      if (delayConnectionChoice && delegateStatement == null) {
-        if (queuedStatementActions == null) {
-          queuedStatementActions = new ArrayList<>(2);
+      synchronized (this) { // TODO - improve performance
+        if (delegateStatement == null) {
+          if (queuedStatementActions == null) {
+            queuedStatementActions = new ArrayList<>(2);
+          }
+          queuedStatementActions.add(action);
+        } else {
+          action.run(delegateStatement);
         }
-        queuedStatementActions.add(action);
-      } else {
-        action.run(delegate());
       }
     }
 

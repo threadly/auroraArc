@@ -13,6 +13,12 @@ public class AuroraServer implements Comparable<AuroraServer> {
   private final Properties info;
   private final int hashCode;
 
+  /**
+   * Construct a new {@link AuroraServer} for a given {@code host:post} string.
+   * 
+   * @param server Host and port within a single string
+   * @param info Properties for the connection
+   */
   public AuroraServer(String server, Properties info) {
     int delim = server.indexOf(':');
     if (delim > 0) {
@@ -27,6 +33,13 @@ public class AuroraServer implements Comparable<AuroraServer> {
     hashCode = host.hashCode() ^ port;
   }
 
+  /**
+   * Construct a new {@link AuroraServer} with the host and port broken into individual components.
+   * 
+   * @param host Server host / dns
+   * @param port Port to connect to
+   * @param info Properties for the connection
+   */
   public AuroraServer(String host, int port, Properties info) {
     this.host = host.intern();
     this.port = port;
@@ -70,6 +83,11 @@ public class AuroraServer implements Comparable<AuroraServer> {
     }
   }
 
+  /**
+   * Produce a {@code host:port} representation of the host to be connected to.
+   * 
+   * @return The destination host and port represented in a single string
+   */
   public String hostAndPortString() {
     return host + ":" + port;
   }
@@ -79,6 +97,11 @@ public class AuroraServer implements Comparable<AuroraServer> {
     return hostAndPortString();
   }
 
+  /**
+   * Return the properties for the connection.
+   * 
+   * @return Properties provided at construction
+   */
   public Properties getProperties() {
     return info;
   }
