@@ -55,6 +55,8 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    * @throws SQLException Thrown if issue in establishing delegate connections
    */
   public DelegatingAuroraConnection(String url, Properties info) throws SQLException {
+    super(url.contains("delayConnectionChoice=true"));
+    
     int endDelim = url.indexOf('/', URL_PREFIX.length());
     if (endDelim < 0) {
       throw new IllegalArgumentException("Invalid URL: " + url);

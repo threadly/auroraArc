@@ -6,7 +6,6 @@ import java.io.PrintStream;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.Iterator;
 import java.util.List;
 
 import org.junit.AfterClass;
@@ -31,21 +30,42 @@ import org.skife.jdbi.v2.sqlobject.mixins.Transactional;
 import org.skife.jdbi.v2.tweak.ResultSetMapper;
 import org.threadly.concurrent.UnfairExecutor;
 import org.threadly.util.Clock;
-import org.threadly.util.Pair;
 import org.threadly.util.StringUtils;
 import org.threadly.util.SuppressedStackRuntimeException;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
 @FixMethodOrder(MethodSorters.NAME_ASCENDING) // tests prefixed `a|z[0-9]_` to set order where it matters
 public class ActionLogger {
+  private static final boolean POOLED = true;
+  
   private static JdbiDao DAO;
 
   @BeforeClass
   public static void setupClass() throws ClassNotFoundException {
-    Class.forName(LoggingDriver.class.getName());
-    DBI dbi = new DBI("jdbc:mysql:logging://127.0.0.1:3306/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC",
-                      "auroraArc", "");
     System.out.println("-- OPENING --");
-    DAO = dbi.open(JdbiDao.class);
+    if (POOLED) {
+      HikariConfig c = new HikariConfig();
+      c.setUsername("auroraArc");
+      c.setPassword("");
+      c.setJdbcUrl("jdbc:mysql:logging://127.0.0.1:3306/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false");
+      c.setDriverClassName(LoggingDriver.class.getName());
+      c.setMaximumPoolSize(1);
+      c.setMinimumIdle(1);
+      c.setIdleTimeout(0);
+      c.setConnectionTimeout(600_000);
+      c.setLeakDetectionThreshold(0);
+      c.setPoolName("auroraArc");
+  
+      DBI dbi = new DBI(new HikariDataSource(c));
+      DAO = dbi.onDemand(JdbiDao.class);
+    } else {
+      Class.forName(LoggingDriver.class.getName());
+      DBI dbi = new DBI("jdbc:mysql:logging://127.0.0.1:3306/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false",
+                        "auroraArc", "");
+      DAO = dbi.open(JdbiDao.class);
+    }
   }
 
   @AfterClass
@@ -68,7 +88,7 @@ public class ActionLogger {
         }
       }));
       UnfairExecutor executor = new UnfairExecutor(31);
-      for (int i = 0; i < 10_000; i++) {
+      for (int i = 0; i < 8000_000; i++) {
         executor.execute(() -> DAO.insertRecord(StringUtils.makeRandomString(10)));
       }
       executor.shutdown();
@@ -116,9 +136,10 @@ public class ActionLogger {
   @Test
   public void z_lookupRecordsPaged() throws InterruptedException {
     System.out.println("-- STARTING: lookupRecordsPaged --");
-    Iterator<?> it = DAO.lookupAllRecords();
-    while (it.hasNext()) {
-      it.next(); // ignore value
+    try (ResultIterator<TestRecord> it = DAO.lookupAllRecords()) {
+      while (it.hasNext()) {
+        it.next();
+      }
     }
   }
 
@@ -166,7 +187,7 @@ public class ActionLogger {
     });
   }
 
-  @RegisterMapper(RecordPairMapper.class)
+  @RegisterMapper(RecordMapper.class)
   public abstract static class JdbiDao implements Transactional<JdbiDao>, GetHandle {
     @SqlUpdate("INSERT INTO records (value, created_date) VALUES (:record, NOW())")
     public abstract void insertRecord(@Bind("record") String record);
@@ -185,22 +206,35 @@ public class ActionLogger {
     public abstract int recordCount();
 
     @SqlQuery("SELECT * FROM records WHERE id = :id")
-    public abstract Pair<Long, String> lookupRecord(@Bind("id") int id);
+    public abstract TestRecord lookupRecord(@Bind("id") int id);
 
     @SqlQuery("SELECT * FROM records WHERE created_date < :time")
-    public abstract List<Pair<Long, String>> lookupRecordsCreatedBefore(@Bind("time") Timestamp timestamp);
+    public abstract List<TestRecord> lookupRecordsCreatedBefore(@Bind("time") Timestamp timestamp);
 
     @FetchSize(Integer.MIN_VALUE)
     @SqlQuery("SELECT * FROM records")
-    public abstract ResultIterator<Pair<Long, String>> lookupAllRecords();
+    public abstract ResultIterator<TestRecord> lookupAllRecords();
 
     public abstract void close();
   }
 
-  public static class RecordPairMapper implements ResultSetMapper<Pair<Long, String>> {
+  @SuppressWarnings("unused")
+  private static class TestRecord {
+    public final int id;
+    public final String value;
+    public final long timestamp;
+    
+    public TestRecord(int id, String value, long timestamp) {
+      this.id = id;
+      this.value = value;
+      this.timestamp = timestamp;
+    }
+  }
+
+  public static class RecordMapper implements ResultSetMapper<TestRecord> {
     @Override
-    public Pair<Long, String> map(int index, ResultSet r, StatementContext ctx) throws SQLException {
-      return new Pair<>(r.getDate("created_date").getTime(), r.getString("value"));
+    public TestRecord map(int index, ResultSet r, StatementContext ctx) throws SQLException {
+      return new TestRecord(r.getInt("id"), r.getString("value"), r.getDate("created_date").getTime());
     }
   }
 }
