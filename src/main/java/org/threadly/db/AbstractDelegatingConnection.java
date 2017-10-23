@@ -284,11 +284,7 @@ public abstract class AbstractDelegatingConnection implements Connection {
       this.resultSetType = resultSetType;
       this.resultSetConcurrency = resultSetConcurrency;
       this.resultSetHoldability = resultSetHoldability;
-      if (delayConnectionChoice) {
-        delegateStatement = null;
-      } else {
-        delegateStatement = processOnDelegate(delegateStatementProvider());
-      }
+      delegateStatement = null;
       queuedStatementActions = null;
     }
 
@@ -311,13 +307,13 @@ public abstract class AbstractDelegatingConnection implements Connection {
 
     // used when there is no result, and thus the action may be delayed
     protected void action(SQLOperation<ST, Void> action) throws SQLException {
-      if (delegateStatement == null) {
+      if (delayConnectionChoice && delegateStatement == null) {
         if (queuedStatementActions == null) {
           queuedStatementActions = new ArrayList<>(2);
         }
         queuedStatementActions.add(action);
       } else {
-        action.run(delegateStatement);
+        action.run(delegate());
       }
     }
 
