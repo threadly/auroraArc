@@ -142,8 +142,19 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
   }
 
   @Override
-  public boolean isClosed() {
-    return closed.get();
+  public boolean isClosed() throws SQLException {
+    if (closed.get()) {
+      return true;
+    } else {
+      // TODO - would be nice to find a way to be push notified of closed events rather than lazily checking
+      for (ConnectionHolder ch : connections) {
+        if (ch.uncheckedState().isClosed()) {
+          // TODO - do we want to ensure other connections are closed?
+          return true;
+        }
+      }
+      return false;
+    }
   }
 
   @Override
