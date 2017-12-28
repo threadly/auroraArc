@@ -17,11 +17,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.threadly.concurrent.ConfigurableThreadFactory;
-import org.threadly.concurrent.PriorityScheduler;
-import org.threadly.concurrent.PrioritySchedulerService;
+import org.threadly.concurrent.CentralThreadlyPool;
 import org.threadly.concurrent.ReschedulingOperation;
-import org.threadly.concurrent.TaskPriority;
+import org.threadly.concurrent.SubmitterScheduler;
 
 /**
  * Class which monitors a "cluster" of aurora servers.  It is expected that for each given cluster
@@ -37,19 +35,12 @@ public class AuroraClusterMonitor {
   private static final Logger LOG = Logger.getLogger(AuroraClusterMonitor.class.getSimpleName());
 
   protected static final int CHECK_FREQUENCY_MILLIS = 500;  // TODO - make configurable
-  protected static final int MINIMUM_THREAD_POOL_SIZE = 4;
-  protected static final int MAXIMUM_THREAD_POOL_SIZE = 32;
-  protected static final PrioritySchedulerService MONITOR_SCHEDULER;
+  protected static final int MAXIMUM_THREAD_POOL_SIZE = 64;
+  protected static final SubmitterScheduler MONITOR_SCHEDULER;
   protected static final ConcurrentMap<Set<AuroraServer>, AuroraClusterMonitor> MONITORS;
 
   static {
-    PriorityScheduler ps =
-        new PriorityScheduler(MINIMUM_THREAD_POOL_SIZE, TaskPriority.High, 1000,
-                              new ConfigurableThreadFactory("auroraMonitor-", false, true,
-                                                            Thread.NORM_PRIORITY, null, null));
-    ps.prestartAllThreads();
-    ps.setPoolSize(MAXIMUM_THREAD_POOL_SIZE); 
-    MONITOR_SCHEDULER = ps;
+    MONITOR_SCHEDULER = CentralThreadlyPool.threadPool(MAXIMUM_THREAD_POOL_SIZE, "auroraMonitor");
 
     MONITORS = new ConcurrentHashMap<>();
   }
@@ -79,7 +70,7 @@ public class AuroraClusterMonitor {
   protected final ClusterChecker clusterStateChecker;
   private final AtomicLong replicaIndex;  // used to distribute replica reads
 
-  protected AuroraClusterMonitor(PrioritySchedulerService scheduler, long checkIntervalMillis,
+  protected AuroraClusterMonitor(SubmitterScheduler scheduler, long checkIntervalMillis,
                                  Set<AuroraServer> clusterServers) {
     clusterStateChecker = new ClusterChecker(scheduler, checkIntervalMillis, clusterServers);
     replicaIndex = new AtomicLong();
@@ -133,14 +124,14 @@ public class AuroraClusterMonitor {
    * (and thus will witness the final cluster state).
    */
   protected static class ClusterChecker extends ReschedulingOperation {
-    protected final PrioritySchedulerService scheduler;
+    protected final SubmitterScheduler scheduler;
     protected final Map<AuroraServer, ServerMonitor> allServers;
     protected final List<AuroraServer> secondaryServers;
     protected final AtomicReference<AuroraServer> masterServer;
-    protected final List<AuroraServer> serversWaitingExpeditiedCheck;
+    protected final CopyOnWriteArrayList<AuroraServer> serversWaitingExpeditiedCheck;
     private volatile boolean initialized = false; // starts false to avoid updates while constructor is running
 
-    protected ClusterChecker(PrioritySchedulerService scheduler, long checkIntervalMillis,
+    protected ClusterChecker(SubmitterScheduler scheduler, long checkIntervalMillis,
                              Set<AuroraServer> clusterServers) {
       super(scheduler, 0);
 
@@ -164,7 +155,7 @@ public class AuroraClusterMonitor {
             }
           }
         } else {  // all other checks can be async, adding in as secondary servers as they complete
-          scheduler.execute(monitor, TaskPriority.Low);
+          scheduler.execute(monitor);
         }
 
         scheduler.scheduleAtFixedRate(monitor,
@@ -182,7 +173,7 @@ public class AuroraClusterMonitor {
     }
 
     // used in testing
-    protected ClusterChecker(PrioritySchedulerService scheduler, long checkIntervalMillis,
+    protected ClusterChecker(SubmitterScheduler scheduler, long checkIntervalMillis,
                              Map<AuroraServer, ServerMonitor> clusterServers) {
       super(scheduler, 0);
 
@@ -196,13 +187,14 @@ public class AuroraClusterMonitor {
     }
 
     protected void expediteServerCheck(ServerMonitor serverMonitor) {
-      // check is not exactly thread safe, but will stop the worst of it
-      if (! serversWaitingExpeditiedCheck.contains(serverMonitor.server)) {
-        serversWaitingExpeditiedCheck.add(serverMonitor.server);
+      if (serversWaitingExpeditiedCheck.addIfAbsent(serverMonitor.server)) {
         scheduler.execute(() -> {
-          serversWaitingExpeditiedCheck.remove(serverMonitor.server);
-          serverMonitor.run();
-        }, TaskPriority.Low);
+          try {
+            serverMonitor.run();
+          } finally {
+            serversWaitingExpeditiedCheck.remove(serverMonitor.server);
+          }
+        });
       }
     }
 
