@@ -15,10 +15,3 @@ The driver aims to faciliate taking advantages of Aurora's low secondary read sl
 One of the most significant advantages to Aurora is how fast failovers can be.  Supporting this in the best way possible was a primary motivation in building this driver.  Our drivers aurora connections are able to share a common view of the cluster.  Meaning that failover events are recognized quickly, maybe from the cluster monitoring itself, or as one connection has issues, it can initiate checks to try and minimize failures.  We also do best effort attempts, for example if the master server has gone down without a clear replacement yet we will attempt to leverage the secondary servers to and maintain what we can for read only actions.
 
 Looking towards the future, it should be easy to allow other drivers to be used as well if there is a need.  In time this may become a great layer for any primary / secondary sql setup where one wants to leverage reading from the secondary replica.
-
-## TODO:
-* It might make sense for our delegating connection to try and conceal errors and reconnection individual connections rather than have the pool reproduce them all (which thus invalidates and restablishes to the still healthy servers after a failover).
-* Optimizations in DelegatingAuroraConnection around locking
-* Discover all cluster hosts from a cluster URL rather than requiring all to be specified
-* Add configuration capabilities (for example poll rate against cluster servers)
-* Allow flexability for any master/slave database setup
