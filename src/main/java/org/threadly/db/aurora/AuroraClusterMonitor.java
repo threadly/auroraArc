@@ -161,7 +161,8 @@ public class AuroraClusterMonitor {
         scheduler.scheduleAtFixedRate(monitor,
                                       // hopefully well distributed hash code will distribute
                                       // these tasks so that they are not all checked at once
-                                      Math.abs(System.identityHashCode(monitor)) % checkIntervalMillis,
+                                      // we convert to a long to avoid a possible overflow at Integer.MIN_VALUE
+                                      Math.abs((long)System.identityHashCode(monitor)) % checkIntervalMillis,
                                       checkIntervalMillis);
       }
       if (masterServer.get() == null) {
