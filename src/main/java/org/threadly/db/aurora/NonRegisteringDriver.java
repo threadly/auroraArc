@@ -21,6 +21,9 @@ import org.threadly.db.AbstractArcDriver;
  * In general the user does not need to concern themselves with this benefit. Just be aware that multiple connections
  * will be established for every connection returned by this Driver.
  * <p>
+ * Note: This driver is NOT registering connection to the connection manager, and is typically used by a JNDI compatible
+ * application server...
+ * <p>
  * Possible URL configuration options:
  * <ul>
  * <li>{@code "optimizedStateUpdates=true"} - Experimental internal code that can provide performance gains

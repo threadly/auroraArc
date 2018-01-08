@@ -15,8 +15,7 @@ public class AuroraDataSourceFactory implements ObjectFactory {
   protected final static String DATA_SOURCE_CLASS_NAME = AuroraDataSource.class.getName();
   
   @Override
-  public Object getObjectInstance(Object refObj, Name nm, Context ctx, Hashtable<?, ?> env)
-                                                                                            throws Exception {
+  public Object getObjectInstance(Object refObj, Name nm, Context ctx, Hashtable<?, ?> env) throws Exception {
     Reference ref = (Reference) refObj;
     String className = ref.getClassName();
     

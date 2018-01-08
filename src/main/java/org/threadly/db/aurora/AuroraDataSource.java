@@ -16,9 +16,8 @@ import javax.sql.DataSource;
 
 public final class AuroraDataSource implements DataSource, Referenceable, Serializable {
   
+  private static final long serialVersionUID = -8925224249843386407L;
   private static final String AURORA_PREFIX = "jdbc:mysql:aurora:";
-  
-  private static final long serialVersionUID = 1L;
   
   /** The driver to create connections with */
   private static final NonRegisteringDriver driver;
@@ -58,7 +57,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   protected int port = 3306;
   
   /**
-   * Default no-arg constructor for Serialization
+   * Default no-arg constructor for Serialization.
    */
   public AuroraDataSource() {
     // Default constructor for Serialization...
@@ -84,19 +83,6 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
     return getConnection(this.user, this.password);
   }
   
-  /**
-   * Creates a new connection with the given username and passwordsetPropertiesViaRef
-   * 
-   * @param userID
-   *          the user id to connect with
-   * @param pass
-   *          the password to connect with
-   * 
-   * @return a connection to the database
-   * 
-   * @throws SQLException
-   *           if an error occurs
-   */
   @Override
   public Connection getConnection(String userID, String pass) throws SQLException {
     Properties props = new Properties();
@@ -122,11 +108,6 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
     return 0;
   }
   
-  /**
-   * Sets the log writer for this data source.
-   * 
-   * @see javax.sql.DataSource#setLogWriter(PrintWriter)
-   */
   @Override
   public void setLogWriter(PrintWriter output) throws SQLException {
     this.logWriter = output;
@@ -138,7 +119,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   }
   
   /**
-   * Sets the password
+   * Sets the password.
    * 
    * @param pass
    *          the password
@@ -158,7 +139,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   }
   
   /**
-   * Returns the port number
+   * Returns the port number.
    * 
    * @return the port number
    */
@@ -177,7 +158,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   }
   
   /**
-   * Returns the configured user for this connection
+   * Returns the configured user for this connection.
    * 
    * @return the user for this connection
    */
@@ -196,7 +177,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   }
   
   /**
-   * Gets the name of the database
+   * Gets the name of the database.
    * 
    * @return the name of the database for this data source
    */
@@ -215,7 +196,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   }
   
   /**
-   * Returns the name of the database server
+   * Returns the name of the database server.
    * 
    * @return the name of the database server
    */
@@ -224,7 +205,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   }
   
   /**
-   * Sets the URL for this connection
+   * Sets the URL for this connection.
    * 
    * @param url
    *          the URL for this connection
@@ -234,7 +215,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   }
   
   /**
-   * Returns the URL for this connection
+   * Returns the URL for this connection.
    * 
    * @return the URL for this connection
    */
@@ -262,8 +243,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   public String getUrl() {
     if (!this.explicitUrl) {
       StringBuilder sbUrl = new StringBuilder(AURORA_PREFIX);
-      sbUrl.append("//").append(getServerName()).append(":").append(getPort()).append("/").append(
-                                                                                                  getDatabaseName());
+      sbUrl.append("//").append(getServerName()).append(":").append(getPort()).append("/").append(getDatabaseName());
       return sbUrl.toString();
     }
     return this.url;
@@ -285,14 +265,6 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
     return driver.connect(jdbcUrlToUse, props);
   }
   
-  /**
-   * Required method to support this class as a <CODE>Referenceable</CODE>.
-   * 
-   * @return a Reference to this data source
-   * 
-   * @throws NamingException
-   *           if a JNDI error occurs
-   */
   @Override
   public Reference getReference() throws NamingException {
     String factoryName = AuroraDataSourceFactory.class.getName();
