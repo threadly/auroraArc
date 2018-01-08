@@ -3,6 +3,16 @@ This project is in extremely early phases (though may be usable).  Unless intere
 
 The goal is to provide a fault tollerant, and high performance, driver for AWS's Aurora servers.  The driver is designed to be small and light weight, with minimal external dependencies.
 
+Include the auroraArc driver into your project from maven central: 
+
+```script
+<dependency>
+	<groupId>org.threadly</groupId>
+	<artifactId>auroraArc</artifactId>
+	<version>0.4</version>
+</dependency>
+```
+
 ## How stable is it?
 
 This is still a work in progress.  Like most open source projects this project is use at your own risk.  The 0.1 release will indicate a point of some initial stability, typically against JDBI / HikariCP / manual use.  Use in other tools are more likely to uncover unexpected behavior.  If there is a specific tooling configuration you would like tested or are curious about please open an issue.
