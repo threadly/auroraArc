@@ -20,7 +20,7 @@ import java.sql.SQLException;
  * <li>{@code "optimizedStateUpdates=true"} - Experimental internal code that can provide performance gains
  * </ul>
  */
-public class Driver extends NonRegisteringDriver implements java.sql.Driver {
+public class Driver extends NonRegisteringDriver {
   static {
     try {
       DriverManager.registerDriver(new Driver());

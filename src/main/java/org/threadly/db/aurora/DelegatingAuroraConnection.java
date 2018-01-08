@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.threadly.db.AbstractDelegatingConnection;
 import org.threadly.db.aurora.DelegatingAuroraConnection.ConnectionStateManager.ConnectionHolder;
@@ -467,26 +466,26 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
      * if it has changed.  However in an attempt to modify behavior to the delegate connections as 
      * little as possible we will forward requests that we might have otherwise thought were useless.
      */
-    private AtomicInteger readOnlyModificationCount = new AtomicInteger(0);
-    private AtomicInteger autoCommitModificationCount = new AtomicInteger(0);
-    private AtomicInteger transactionIsolationLevelModificationCount = new AtomicInteger(0);
+    private volatile int readOnlyModificationCount = 0;
+    private volatile int autoCommitModificationCount = 0;
+    private volatile int transactionIsolationLevelModificationCount = 0;
 
     @Override
     public void setReadOnly(boolean readOnly) {
       super.setReadOnly(readOnly);
-      readOnlyModificationCount.incrementAndGet();
+      readOnlyModificationCount++;
     }
 
     @Override
     public void setAutoCommit(boolean autoCommit) {
       super.setAutoCommit(autoCommit);
-      autoCommitModificationCount.incrementAndGet();
+      autoCommitModificationCount++;
     }
 
     @Override
     public void setTransactionIsolationLevel(int level) {
       super.setTransactionIsolationLevel(level);
-      transactionIsolationLevelModificationCount.incrementAndGet();
+      transactionIsolationLevelModificationCount++;
     }
 
     @Override
@@ -506,26 +505,23 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
       public SafeConnectionHolder(Connection connection) {
         super(connection);
         
-        connectionReadOnlyModificationCount = readOnlyModificationCount.get();
-        connectionAutoCommitModificationCount = autoCommitModificationCount.get();
-        connectionIsolationLevelModificationCount = transactionIsolationLevelModificationCount.get();
+        connectionReadOnlyModificationCount = readOnlyModificationCount;
+        connectionAutoCommitModificationCount = autoCommitModificationCount;
+        connectionIsolationLevelModificationCount = transactionIsolationLevelModificationCount;
       }
 
       @Override
       public Connection verifiedState() throws SQLException {
-        final int modCount = readOnlyModificationCount.get();
-		if (connectionReadOnlyModificationCount != modCount) {
-          connectionReadOnlyModificationCount = modCount;
+        if (connectionReadOnlyModificationCount != readOnlyModificationCount) {
+          connectionReadOnlyModificationCount = readOnlyModificationCount;
           connection.setReadOnly(readOnly);
         }
-		final int autoModCount = autoCommitModificationCount.get();
-        if (connectionAutoCommitModificationCount != autoModCount) {
-          connectionAutoCommitModificationCount = autoModCount;
+        if (connectionAutoCommitModificationCount != autoCommitModificationCount) {
+          connectionAutoCommitModificationCount = autoCommitModificationCount;
           connection.setAutoCommit(autoCommit);
         }
-        final int isoModCount = transactionIsolationLevelModificationCount.get();
-        if (connectionIsolationLevelModificationCount != isoModCount) {
-          connectionIsolationLevelModificationCount = isoModCount;
+        if (connectionIsolationLevelModificationCount != transactionIsolationLevelModificationCount) {
+          connectionIsolationLevelModificationCount = transactionIsolationLevelModificationCount;
           connection.setTransactionIsolation(transactionIsolationLevel);
         }
 
