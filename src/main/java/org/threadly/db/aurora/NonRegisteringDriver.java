@@ -8,35 +8,21 @@ import java.util.Properties;
 import java.util.logging.Logger;
 
 import org.threadly.db.AbstractArcDriver;
-
 /**
- * Threadly's AuroraArc NonRegisteringDriver. This Driver will create multiple connections for each returned connection
- * it provides. Using these connections to monitor the aurora state, and to distribute queries to multiple aurora
- * servers when possible.
+ * Threadly's AuroraArc non-registering Driver.  This Driver will create multiple connections for 
+ * each returned connection it provides.  Using these connections to monitor the aurora state, and 
+ * to distribute queries to multiple aurora servers when possible.
  * <p>
- * This is different from most SQL drivers, in that there is shared state between all returned connections. This shared
- * state allows things like fail conditions to be communicated quickly, allowing for intelligence of how to mitigate
- * problems, and use potential secondary / slave servers as soon as possible.
- * <p>
- * In general the user does not need to concern themselves with this benefit. Just be aware that multiple connections
- * will be established for every connection returned by this Driver.
- * <p>
- * Note: This driver is NOT registering connection to the connection manager, and is typically used by a JNDI compatible
- * application server...
- * <p>
- * Possible URL configuration options:
- * <ul>
- * <li>{@code "optimizedStateUpdates=true"} - Experimental internal code that can provide performance gains
- * </ul>
+ * Note: This driver is NOT registering connection to the connection manager, and is typically used 
+ * by a JNDI compatible application server.  Please see {@link Driver} for more complete javadocs, 
+ * since that is what most people will find useful.
  */
 public class NonRegisteringDriver extends AbstractArcDriver {
-  
   /**
-   * Another way to register the driver. This is more convenient than `Class.forName(String)` as no exceptions need to
-   * be handled (instead just relying on the compile time dependency).
+   * Construct a new driver.
    */
-  public static void registerDriver() {
-    // Nothing needed, just a nicer way to initialize the static registration compared to Class.forName.
+  public NonRegisteringDriver() {
+    // Required for Class.forName().newInstance()
   }
   
   @Override
@@ -61,7 +47,6 @@ public class NonRegisteringDriver extends AbstractArcDriver {
   
   @Override
   public boolean jdbcCompliant() {
-    // should be compliant since just depending on mysql connector
     return DelegateDriver.getDriver().jdbcCompliant();
   }
   
