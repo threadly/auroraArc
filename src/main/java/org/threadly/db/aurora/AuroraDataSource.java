@@ -9,60 +9,103 @@ import java.util.Properties;
 import java.util.logging.Logger;
 
 import javax.naming.NamingException;
+import javax.naming.RefAddr;
 import javax.naming.Reference;
 import javax.naming.Referenceable;
 import javax.naming.StringRefAddr;
 import javax.sql.DataSource;
 
+import org.threadly.util.StringUtils;
+
 public final class AuroraDataSource implements DataSource, Referenceable, Serializable {
-  
   private static final long serialVersionUID = -8925224249843386407L;
-  private static final String AURORA_PREFIX = "jdbc:mysql:aurora:";
+  private static final NonRegisteringDriver DRIVER = new NonRegisteringDriver();
   
-  /** The driver to create connections with */
-  private static final NonRegisteringDriver driver;
-  
-  static {
-    driver = new NonRegisteringDriver();
+  private static String nullSafeRefAddrStringGet(String referenceName, Reference ref) {
+    RefAddr refAddr = ref.get(referenceName);
+    return (refAddr != null) ? (String) refAddr.getContent() : null;
   }
   
-  /** Log stream */
-  protected transient PrintWriter logWriter = null;
-  
-  /** Database Name */
-  protected String databaseName = null;
-  
-  /** Character Encoding */
-  protected String encoding = null;
-  
-  /** Hostname */
-  protected String hostName = null;
-  
-  /** Password */
-  protected String password = null;
-  
-  /** The profileSQL property */
-  protected String profileSQLString = "false";
-  
-  /** The JDBC URL */
-  protected String url = null;
-  
-  /** User name */
-  protected String user = null;
-  
-  /** Should we construct the URL, or has it been set explicitly */
-  protected boolean explicitUrl = false;
-  
-  /** Port number */
-  protected int port = 3306;
+  protected transient PrintWriter logWriter;
+  protected String databaseName;
+  protected String hostName;
+  protected int port;
+  protected String user;
+  protected String password;
+  protected boolean explicitUrl;
+  protected String url;
   
   /**
    * Default no-arg constructor for Serialization.
    */
   public AuroraDataSource() {
     // Default constructor for Serialization...
+    logWriter = null;
+    databaseName = null;
+    hostName = null;
+    port = 3306;
+    user = null;
+    password = null;
+    explicitUrl = false;
+    url = null;
+  }
+
+  /**
+   * Constructs and initializes driver properties from a JNDI reference.
+   * 
+   * @param ref The JNDI Reference that holds {@link RefAddr}s for all properties
+   */
+  protected AuroraDataSource(Reference ref) {
+    this();  // get defaults
+    
+    String portNumberStr = nullSafeRefAddrStringGet("port", ref);
+    if (! StringUtils.isNullOrEmpty(portNumberStr)) {
+      int portNumber = Integer.parseInt(portNumberStr);
+      setPort(portNumber);
+    }
+    
+    String user = nullSafeRefAddrStringGet("user", ref);
+    if (user != null) {
+      setUsername(user);
+    }
+    
+    String password = nullSafeRefAddrStringGet("password", ref);
+    if (password != null) {
+      setPassword(password);
+    }
+    
+    String serverName = nullSafeRefAddrStringGet("serverName", ref);
+    if (serverName != null) {
+      setServerName(serverName);
+    }
+    
+    String databaseName = nullSafeRefAddrStringGet("databaseName", ref);
+    if (databaseName != null) {
+      setDatabaseName(databaseName);
+    }
+    
+    String explicitUrlAsString = nullSafeRefAddrStringGet("explicitUrl", ref);
+    if (! StringUtils.isNullOrEmpty(explicitUrlAsString) && 
+        Boolean.parseBoolean(explicitUrlAsString)) {
+      setURL(nullSafeRefAddrStringGet("url", ref));
+    }
   }
   
+  @Override
+  public Reference getReference() throws NamingException {
+    String factoryName = AuroraDataSourceFactory.class.getName();
+    Reference ref = new Reference(getClass().getName(), factoryName, null);
+    ref.add(new StringRefAddr("user", this.user));
+    ref.add(new StringRefAddr("password", this.password));
+    ref.add(new StringRefAddr("serverName", getServerName()));
+    ref.add(new StringRefAddr("port", Integer.toString(port)));
+    ref.add(new StringRefAddr("databaseName", getDatabaseName()));
+    ref.add(new StringRefAddr("explicitUrl", Boolean.toString(this.explicitUrl)));
+    ref.add(new StringRefAddr("url", StringUtils.nullToEmpty(url)));
+    
+    return ref;
+  }
+
   @Override
   public Logger getParentLogger() throws SQLFeatureNotSupportedException {
     return null;
@@ -90,12 +133,11 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
     if (userID != null) {
       props.setProperty("user", userID);
     }
-    
     if (pass != null) {
       props.setProperty("password", pass);
     }
     
-    return getConnection(props);
+    return DRIVER.connect(getURL(), props);
   }
   
   @Override
@@ -114,15 +156,14 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   }
   
   @Override
-  public void setLoginTimeout(int arg0) throws SQLException {
+  public void setLoginTimeout(int timeout) throws SQLException {
     // Timeout not handled
   }
   
   /**
-   * Sets the password.
+   * Sets the password to be used for new connections.
    * 
-   * @param pass
-   *          the password
+   * @param pass the password
    */
   public void setPassword(String pass) {
     this.password = pass;
@@ -131,46 +172,43 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
   /**
    * Sets the database port.
    * 
-   * @param p
-   *          the port
+   * @param port the port to connect to
    */
-  public void setPort(int p) {
-    this.port = p;
+  public void setPort(int port) {
+    this.port = port;
   }
   
   /**
-   * Returns the port number.
+   * Returns the port number used for connecting to the database.
    * 
-   * @return the port number
+   * @return the port number used for connecting to the database
    */
   public int getPort() {
     return this.port;
   }
   
   /**
-   * Sets the user ID.
+   * Sets the username to authenticate against the database with.
    * 
-   * @param userID
-   *          the User ID
+   * @param username the username to be paired with the password when connecting to database
    */
-  public void setUser(String userID) {
-    this.user = userID;
+  public void setUsername(String username) {
+    this.user = username;
   }
   
   /**
-   * Returns the configured user for this connection.
+   * Returns the configured username for this connection.
    * 
-   * @return the user for this connection
+   * @return the username for this connection
    */
-  public String getUser() {
+  public String getUsername() {
     return this.user;
   }
   
   /**
    * Sets the database name.
    * 
-   * @param dbName
-   *          the name of the database
+   * @param dbName the name of the database
    */
   public void setDatabaseName(String dbName) {
     this.databaseName = dbName;
@@ -182,14 +220,13 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
    * @return the name of the database for this data source
    */
   public String getDatabaseName() {
-    return (this.databaseName != null) ? this.databaseName : "";
+    return StringUtils.nullToEmpty(this.databaseName);
   }
   
   /**
    * Sets the server name.
    * 
-   * @param serverName
-   *          the server name
+   * @param serverName the server name
    */
   public void setServerName(String serverName) {
     this.hostName = serverName;
@@ -201,93 +238,37 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
    * @return the name of the database server
    */
   public String getServerName() {
-    return (this.hostName != null) ? this.hostName : "";
+    return StringUtils.nullToEmpty(this.hostName);
   }
   
   /**
-   * Sets the URL for this connection.
+   * This method is used by the app server to set the url string specified within the datasource 
+   * deployment descriptor.  It is discovered using introspection and matches if property name in 
+   * descriptor is "url".
    * 
-   * @param url
-   *          the URL for this connection
+   * @param url url to be used within driver.connect
    */
   public void setURL(String url) {
-    setUrl(url);
-  }
-  
-  /**
-   * Returns the URL for this connection.
-   * 
-   * @return the URL for this connection
-   */
-  public String getURL() {
-    return getUrl();
-  }
-  
-  /**
-   * This method is used by the app server to set the url string specified within the datasource deployment descriptor.
-   * It is discovered using introspection and matches if property name in descriptor is "url".
-   * 
-   * @param url
-   *          url to be used within driver.connect
-   */
-  public void setUrl(String url) {
     this.url = url;
     this.explicitUrl = true;
   }
   
   /**
-   * Returns the JDBC URL that will be used to create the database connection.
+   * Returns the JDBC URL that will be used to create the database connection.  If set from 
+   * {@link #setURL(String)} that exact value will be returned.  Otherwise a default generated URL 
+   * will be provided from the other set fields.
    * 
    * @return the URL for this connection
    */
-  public String getUrl() {
-    if (!this.explicitUrl) {
-      StringBuilder sbUrl = new StringBuilder(AURORA_PREFIX);
-      sbUrl.append("//").append(getServerName()).append(":").append(getPort()).append("/").append(getDatabaseName());
-      return sbUrl.toString();
+  public String getURL() {
+    if (this.explicitUrl) {
+      return this.url;
+    } else {
+      StringBuilder urlSb = new StringBuilder();
+      urlSb.append(DelegatingAuroraConnection.URL_PREFIX)
+           .append(getServerName()).append(":").append(port).append("/")
+           .append(getDatabaseName());
+      return urlSb.toString();
     }
-    return this.url;
-  }
-  
-  /**
-   * Creates a connection using the specified properties.
-   * 
-   * @param props
-   *          the properties to connect with
-   * 
-   * @return a connection to the database
-   * 
-   * @throws SQLException
-   *           if an error occurs
-   */
-  protected java.sql.Connection getConnection(Properties props) throws SQLException {
-    final String jdbcUrlToUse = (!this.explicitUrl) ? getUrl() : this.url;
-    return driver.connect(jdbcUrlToUse, props);
-  }
-  
-  @Override
-  public Reference getReference() throws NamingException {
-    String factoryName = AuroraDataSourceFactory.class.getName();
-    Reference ref = new Reference(getClass().getName(), factoryName, null);
-    ref.add(new StringRefAddr("user", getUser()));
-    ref.add(new StringRefAddr("password", this.password));
-    ref.add(new StringRefAddr("serverName", getServerName()));
-    ref.add(new StringRefAddr("port", String.valueOf(getPort())));
-    ref.add(new StringRefAddr("databaseName", getDatabaseName()));
-    ref.add(new StringRefAddr("url", getUrl()));
-    ref.add(new StringRefAddr("explicitUrl", String.valueOf(this.explicitUrl)));
-    
-    return ref;
-  }
-  
-  /**
-   * Initializes driver properties that come from a JNDI reference (in the case of a javax.sql.DataSource bound into
-   * some name service that doesn't handle Java objects directly).
-   * 
-   * @param ref
-   *          The JNDI Reference that holds RefAddrs for all properties
-   */
-  public void setPropertiesViaRef(Reference ref) throws SQLException {
-    // TODO implement it
   }
 }
