@@ -9,8 +9,13 @@ import javax.naming.spi.ObjectFactory;
 
 import org.threadly.util.StringUtils;
 
+/**
+ * Implementation of {@link ObjectFactory} that provides a configured {@link AuroraDataSource}.
+ * 
+ * @since 0.5
+ */
 public class AuroraDataSourceFactory implements ObjectFactory {
-  protected final static String DATA_SOURCE_CLASS_NAME = AuroraDataSource.class.getName();
+  protected static final String DATA_SOURCE_CLASS_NAME = AuroraDataSource.class.getName();
   
   @Override
   public Object getObjectInstance(Object refObj, Name nm, Context ctx, Hashtable<?, ?> env) {

@@ -17,9 +17,16 @@ import javax.sql.DataSource;
 
 import org.threadly.util.StringUtils;
 
+/**
+ * {@link DataSource} implementation which provides aurora {@link Driver} /
+ * {@link DelegatingAuroraConnection} connections.
+ * 
+ * @since 0.5
+ */
 public final class AuroraDataSource implements DataSource, Referenceable, Serializable {
   private static final long serialVersionUID = -8925224249843386407L;
   private static final NonRegisteringDriver DRIVER = new NonRegisteringDriver();
+  private static final int DEFAULT_PORT = 3306;
   
   private static String nullSafeRefAddrStringGet(String referenceName, Reference ref) {
     RefAddr refAddr = ref.get(referenceName);
@@ -43,7 +50,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
     logWriter = null;
     databaseName = null;
     hostName = null;
-    port = 3306;
+    port = DEFAULT_PORT;
     user = null;
     password = null;
     explicitUrl = false;
