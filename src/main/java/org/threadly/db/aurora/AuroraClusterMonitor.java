@@ -282,7 +282,8 @@ public class AuroraClusterMonitor {
     protected void reconnect() throws SQLException {
       Connection newConnection = 
           DelegateDriver.connect(server.hostAndPortString() +
-                                   "/?connectTimeout=10000&socketTimeout=10000&serverTimezone=UTC",
+                                   "/?connectTimeout=10000&socketTimeout=10000" + 
+                                   "&serverTimezone=UTC&useSSL=false",
                                  server.getProperties());
       if (serverConnection != null) { // only attempt to replace once we have a new connection without exception
         try {

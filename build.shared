@@ -15,13 +15,13 @@ dependencies {
     "junit:junit:4.12",
     "org.mockito:mockito-core:2.13.0",
     "org.jdbi:jdbi:2.78",
-    "com.zaxxer:HikariCP:2.7.5",
+    "com.zaxxer:HikariCP:2.7.6",
     "ch.qos.logback:logback-core:1.2.3",
     "ch.qos.logback:logback-classic:1.2.3"
   )
 
   compile (
-    "org.threadly:threadly:5.9",
+    "org.threadly:threadly:5.16",
     "mysql:mysql-connector-java:6.0.6"
   )
 }
