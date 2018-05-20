@@ -15,13 +15,13 @@ dependencies {
     "junit:junit:4.12",
     "org.mockito:mockito-core:2.13.0",
     "org.jdbi:jdbi:2.78",
-    "com.zaxxer:HikariCP:2.7.6",
+    "com.zaxxer:HikariCP:3.1.0",
     "ch.qos.logback:logback-core:1.2.3",
     "ch.qos.logback:logback-classic:1.2.3"
   )
 
   compile (
-    "org.threadly:threadly:5.16",
+    "org.threadly:threadly:5.20",
     "mysql:mysql-connector-java:6.0.6"
   )
 }
@@ -39,6 +39,7 @@ plugins.withType(JavaPlugin) {
 }
 
 test {
+  maxParallelForks = Math.max(1, (int)(Runtime.getRuntime().availableProcessors() / 4))
   jacoco {
     excludes = ['**/package-info**','**/*Test']
     destinationFile = file("$buildDir/reports/jacoco/test.exec")
@@ -48,26 +49,25 @@ test {
   setBinResultsDir(file("${buildDir}/reports/tests/bin"))
 }
 
-build.dependsOn("jacocoTestReport");
+build.dependsOn jacocoTestReport
 
 jacocoTestReport {
   doFirst {
-    classDirectories = fileTree(dir: 'build/classes/main', include: 'org/threadly/**')
-    sourceDirectories = fileTree(dir: 'scr/main/java', include: 'org/threadly/**')
+    classDirectories = fileTree(dir: 'build/classes/java/main', include: 'org/threadly/**')
+    sourceDirectories = fileTree(dir: 'src/main/java', include: 'org/threadly/**')
   }
   reports {
     csv.enabled = false
     xml.enabled = true
-    xml.destination = file("${buildDir}/reports/jacoco/jacoco.xml")
+    xml.destination = file("$buildDir/reports/jacoco/jacoco.xml")
     html.enabled = true
-    html.destination = file("${buildDir}/reports/jacoco/html")
+    html.destination = file("$buildDir/reports/jacoco/html")
   }
   doLast {
     println "Test results available at:"
     println "html - $buildDir/reports/tests/html/index.html"
     println "Test coverage reports available at:"
     println "html - $buildDir/reports/jacoco/html/index.html"
-    println "xml  - $buildDir/reports/jacoco/jacoco.xml"
   }
 }
 
