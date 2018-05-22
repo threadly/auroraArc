@@ -1,99 +1,239 @@
-apply from: 'build.shared'
-apply plugin: 'signing'
+subprojects {
+  apply plugin: 'java'
+  apply plugin: 'checkstyle'
+  apply plugin: 'jacoco'
+  apply plugin: 'maven'
+  apply plugin: 'signing'
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
-
-compileJava {
-  String[] java8Paths = new String[9]
-  java8Paths[0] = "/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/rt.jar"
-  java8Paths[1] = "/usr/lib/jvm/java-8-openjdk/jre/lib/rt.jar"
-  java8Paths[2] = "/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/rt.jar"
-  java8Paths[3] = "/usr/lib/jvm/java-1.8.0-openjdk/jre/lib/rt.jar"
-  java8Paths[4] = "/usr/lib/jvm/java-8-sun/jre/lib/rt.jar"
-  java8Paths[5] = "/usr/lib/jvm/jdk1.8.0_122/jre/lib/rt.jar"
-  java8Paths[6] = "/usr/lib/jvm/jdk1.8.0_65/jre/lib/rt.jar"
-  java8Paths[7] = "/usr/lib/jvm/jdk1.8.0_45/jre/lib/rt.jar"
-  java8Paths[8] = "/usr/lib/jvm/jdk1.8.0_20/jre/lib/rt.jar"
-  for (String path : java8Paths) {
-    if (new java.io.File(path).exists()) {
-      println 'Using java 8 rt.jar: ' + path
-      options.bootClasspath = path
-      break
-    }
-  }
-  if (options.bootClasspath == null) {
-    println 'Unable to find java 8 rt.jar, will cause failure so exiting now'
-    println ''
-    System.exit(1)
-  }
-}
-
-compileTestJava {
-  String[] java8Paths = new String[9]
-  java8Paths[0] = "/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/rt.jar"
-  java8Paths[1] = "/usr/lib/jvm/java-8-openjdk/jre/lib/rt.jar"
-  java8Paths[2] = "/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/rt.jar"
-  java8Paths[3] = "/usr/lib/jvm/java-1.8.0-openjdk/jre/lib/rt.jar"
-  java8Paths[4] = "/usr/lib/jvm/java-8-sun/jre/lib/rt.jar"
-  java8Paths[5] = "/usr/lib/jvm/jdk1.8.0_122/jre/lib/rt.jar"
-  java8Paths[6] = "/usr/lib/jvm/jdk1.8.0_65/jre/lib/rt.jar"
-  java8Paths[7] = "/usr/lib/jvm/jdk1.8.0_45/jre/lib/rt.jar"
-  java8Paths[8] = "/usr/lib/jvm/jdk1.8.0_20/jre/lib/rt.jar"
-  for (String path : java8Paths) {
-    if (new java.io.File(path).exists()) {
-      options.bootClasspath = path
-      break
-    }
-  }
-}
-
-signing {
-  sign configurations.archives
-}
-
-uploadArchives {
   repositories {
-    mavenDeployer {
-      beforeDeployment {
-        MavenDeployment deployment -> signing.signPom(deployment)
+    mavenCentral()
+    maven {
+      url 'https://oss.sonatype.org/content/repositories/snapshots/'
+    }
+  }
+
+  sourceCompatibility = 1.8
+  targetCompatibility = 1.8
+
+  compileJava {
+    String[] java8Paths = new String[9]
+    java8Paths[0] = "/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/rt.jar"
+    java8Paths[1] = "/usr/lib/jvm/java-8-openjdk/jre/lib/rt.jar"
+    java8Paths[2] = "/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/rt.jar"
+    java8Paths[3] = "/usr/lib/jvm/java-1.8.0-openjdk/jre/lib/rt.jar"
+    java8Paths[4] = "/usr/lib/jvm/java-8-sun/jre/lib/rt.jar"
+    java8Paths[5] = "/usr/lib/jvm/jdk1.8.0_122/jre/lib/rt.jar"
+    java8Paths[6] = "/usr/lib/jvm/jdk1.8.0_65/jre/lib/rt.jar"
+    java8Paths[7] = "/usr/lib/jvm/jdk1.8.0_45/jre/lib/rt.jar"
+    java8Paths[8] = "/usr/lib/jvm/jdk1.8.0_20/jre/lib/rt.jar"
+    for (String path : java8Paths) {
+      if (new java.io.File(path).exists()) {
+        println 'Using java 8 rt.jar: ' + path
+        options.bootClasspath = path
+        break
       }
- 
-      repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
-        authentication(userName: sonatypeUsername, password: sonatypePassword)
+    }
+    if (options.bootClasspath == null) {
+      println 'Unable to find java 8 rt.jar, will cause failure so exiting now'
+      println ''
+      System.exit(1)
+    }
+  }
+
+  compileTestJava {
+    String[] java8Paths = new String[9]
+    java8Paths[0] = "/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/rt.jar"
+    java8Paths[1] = "/usr/lib/jvm/java-8-openjdk/jre/lib/rt.jar"
+    java8Paths[2] = "/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/rt.jar"
+    java8Paths[3] = "/usr/lib/jvm/java-1.8.0-openjdk/jre/lib/rt.jar"
+    java8Paths[4] = "/usr/lib/jvm/java-8-sun/jre/lib/rt.jar"
+    java8Paths[5] = "/usr/lib/jvm/jdk1.8.0_122/jre/lib/rt.jar"
+    java8Paths[6] = "/usr/lib/jvm/jdk1.8.0_65/jre/lib/rt.jar"
+    java8Paths[7] = "/usr/lib/jvm/jdk1.8.0_45/jre/lib/rt.jar"
+    java8Paths[8] = "/usr/lib/jvm/jdk1.8.0_20/jre/lib/rt.jar"
+    for (String path : java8Paths) {
+      if (new java.io.File(path).exists()) {
+        options.bootClasspath = path
+        break
       }
-      snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots") {
-        authentication(userName: sonatypeUsername, password: sonatypePassword)
-      }
- 
-      pom.project {
-        name 'auroraArc'
-        packaging 'jar'
-        description 'JDBC driver for AWS Aurora databases.'
-        url 'http://threadly.org/'
- 
-        scm {
-          url 'scm:git@github.com:threadly/auroraArc.git'
-          connection 'scm:git@github.com:threadly/auroraArc.git'
-          developerConnection 'scm:git@github.com:threadly/auroraArc.git'
+    }
+  }
+
+  signing {
+    sign configurations.archives
+  }
+
+  uploadArchives {
+    repositories {
+      mavenDeployer {
+        beforeDeployment {
+          MavenDeployment deployment -> signing.signPom(deployment)
         }
- 
-        licenses {
-          license {
-            name 'Mozilla Public License Version 2.0'
-            url 'https://www.mozilla.org/MPL/2.0/'
-            distribution 'repo'
+   
+        repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+          authentication(userName: sonatypeUsername, password: sonatypePassword)
+        }
+        snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots") {
+          authentication(userName: sonatypeUsername, password: sonatypePassword)
+        }
+   
+        pom.project {
+          name 'auroraArc'
+          packaging 'jar'
+          description 'JDBC driver for AWS Aurora databases.'
+          url 'http://threadly.org/'
+   
+          scm {
+            url 'scm:git@github.com:threadly/auroraArc.git'
+            connection 'scm:git@github.com:threadly/auroraArc.git'
+            developerConnection 'scm:git@github.com:threadly/auroraArc.git'
           }
-        }
- 
-        developers {
-          developer {
-            id 'jent'
-            name 'Mike Jensen'
-            email 'jent@threadly.org'
+   
+          licenses {
+            license {
+              name 'Mozilla Public License Version 2.0'
+              url 'https://www.mozilla.org/MPL/2.0/'
+              distribution 'repo'
+            }
+          }
+   
+          developers {
+            developer {
+              id 'jent'
+              name 'Mike Jensen'
+              email 'jent@threadly.org'
+            }
           }
         }
       }
     }
+  }
+
+  compileJava {
+    options.compilerArgs << "-Xlint:all" << "-Werror"
+  }
+
+  compileTestJava {
+    options.compilerArgs << "-Xlint:all" << "-Werror"
+  }
+
+  plugins.withType(JavaPlugin) {
+    checkstyle.sourceSets = [sourceSets.main]
+  }
+
+  test {
+  maxParallelForks = Math.max(1, (int)(Runtime.getRuntime().availableProcessors() / 4))
+    jacoco {
+      excludes = ['**/package-info**','**/*Test']
+      destinationFile = file("$buildDir/reports/jacoco/test.exec")
+    }
+    getReports().getJunitXml().setDestination(file("$buildDir/reports/tests/xml"))
+    getReports().getHtml().setDestination(file("$buildDir/reports/tests/html"))
+    setBinResultsDir(file("$buildDir/reports/tests/bin"))
+  }
+
+  build.dependsOn jacocoTestReport
+
+  jacocoTestReport {
+    doFirst {
+      classDirectories = fileTree(dir: 'build/classes/java/main', include: 'org/threadly/**')
+      sourceDirectories = fileTree(dir: 'src/main/java', include: 'org/threadly/**')
+    }
+    reports {
+      csv.enabled = false
+      xml.enabled = true
+      xml.destination = file("$buildDir/reports/jacoco/jacoco.xml")
+      html.enabled = true
+      html.destination = file("$buildDir/reports/jacoco/html")
+    }
+    doLast {
+      println "Test results available at:"
+      println "html - $buildDir/reports/tests/html/index.html"
+      println "Test coverage reports available at:"
+      println "html - $buildDir/reports/jacoco/html/index.html"
+    }
+  }
+
+  jar {
+    manifest {
+      attributes 'Implementation-Title': 'auroraArc', 'Implementation-Version': version
+    }
+  }
+
+  javadoc {
+    source = sourceSets.main.allJava
+    options.memberLevel = org.gradle.external.javadoc.JavadocMemberLevel.PUBLIC
+  }
+
+  task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from 'build/docs/javadoc'
+  }
+
+  task sourcesJar(type: Jar) {
+    from sourceSets.main.allSource
+    classifier = 'sources'
+  }
+
+  build.dependsOn("copyLibs");
+
+  task copyLibs(type: Copy) {
+    into "$buildDir/dependencies/"
+    from configurations.testRuntime
+  }
+
+  artifacts {
+    archives jar
+    archives javadocJar
+    archives sourcesJar
+  }
+}
+
+project(':arcCommon') {
+  archivesBaseName = 'arcCommon'
+
+  dependencies {
+    testCompile (
+      "junit:junit:4.12",
+      "org.mockito:mockito-core:2.13.0",
+      "org.jdbi:jdbi:2.78",
+      "com.zaxxer:HikariCP:3.1.0",
+      "ch.qos.logback:logback-core:1.2.3",
+      "ch.qos.logback:logback-classic:1.2.3"
+    )
+
+    compile (
+      "org.threadly:threadly:5.21"
+    )
+  }
+}
+
+project(':mysqlAuroraArc') {
+  archivesBaseName = 'auroraArc-mysql'
+
+  dependencies {
+    testCompile (
+      "junit:junit:4.12",
+      "org.jdbi:jdbi:2.78",
+      "com.zaxxer:HikariCP:3.1.0",
+      "ch.qos.logback:logback-core:1.2.3",
+      "ch.qos.logback:logback-classic:1.2.3"
+    )
+
+    compile (
+      project(":arcCommon"),
+      "mysql:mysql-connector-java:6.0.6"
+    )
+  }
+}
+
+project(':psqlAuroraArc') {
+  archivesBaseName = 'auroraArc-psql'
+
+  dependencies {
+    compile (
+      project(":arcCommon"),
+      "org.postgresql:postgresql:42.2.2"
+    )
   }
 }
