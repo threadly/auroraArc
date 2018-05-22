@@ -1,14 +1,14 @@
 steps:
   - command: "./gradlew clean assemble"
     label: "compile"
-    artifact_paths: "build/libs/*.jar"
+    artifact_paths: "*/build/libs/*.jar"
     timeout: 2
 
   - wait
 
   - command: "./gradlew test"
     label: "unit tests"
-    artifact_paths: "build/reports/tests/xml/*.xml"
+    artifact_paths: "*/build/reports/tests/xml/*.xml"
     timeout: 10
 
   - wait: ~
@@ -16,7 +16,7 @@ steps:
 
   - plugins:
       junit-annotate#v1.2.0:
-        artifacts: build/reports/tests/xml/*.xml
+        artifacts: "*/build/reports/tests/xml/*.xml"
 
   - command: "./gradlew checkstyleMain"
     label: "checkstyle"
