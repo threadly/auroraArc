@@ -9,7 +9,7 @@ Include the auroraArc driver into your project from maven central:
 <dependency>
 	<groupId>org.threadly</groupId>
 	<artifactId>auroraArc</artifactId>
-	<version>0.4</version>
+	<version>0.6</version>
 </dependency>
 ```
 
