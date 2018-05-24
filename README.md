@@ -3,13 +3,25 @@ This project is in extremely early phases (though may be usable).  Unless intere
 
 The goal is to provide a fault tollerant, and high performance, driver for AWS's Aurora servers.  The driver is designed to be small and light weight, with minimal external dependencies.
 
-Include the auroraArc driver into your project from maven central: 
+Include the auroraArc driver into your project from maven central...
+
+For MySQL:
 
 ```script
 <dependency>
 	<groupId>org.threadly</groupId>
-	<artifactId>auroraArc</artifactId>
-	<version>0.6</version>
+	<artifactId>auroraArc-mysql</artifactId>
+	<version>0.7</version>
+</dependency>
+```
+
+For Postgresql:
+
+```script
+<dependency>
+  <groupId>org.threadly</groupId>
+  <artifactId>auroraArc-psql</artifactId>
+  <version>0.7</version>
 </dependency>
 ```
 
