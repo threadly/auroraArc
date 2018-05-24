@@ -11,38 +11,61 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 import org.threadly.db.AbstractArcDriver;
+import org.threadly.db.aurora.DelegateAuroraDriver.IllegalDriverStateException;
 import org.threadly.util.Pair;
 
 public class DelegateMockDriver {
   public static final String MASTER_HOST = "masterHost";
   @SuppressWarnings({"unchecked", "rawtypes"})
-  private static final Pair<String, DelegateDriver>[] ORIGINAL_DELEGATE_DRIVERS = 
-    new Pair[DelegateDriver.DEFAULT_IMPLEMENTATIONS.length];
+  private static final Pair<String, DelegateAuroraDriver>[] ORIGINAL_DELEGATE_DRIVERS = 
+    new Pair[DelegateAuroraDriver.DEFAULT_IMPLEMENTATIONS.length];
 
   static {
     for (int i = 0; i < ORIGINAL_DELEGATE_DRIVERS.length; i++) {
-      ORIGINAL_DELEGATE_DRIVERS[i] = DelegateDriver.DEFAULT_IMPLEMENTATIONS[i];
+      ORIGINAL_DELEGATE_DRIVERS[i] = DelegateAuroraDriver.DEFAULT_IMPLEMENTATIONS[i];
     }
   }
 
-  public static Pair<MockDriver, DelegateDriver> setupMockDriverAsDelegate() {
+  public static Pair<MockDriver, DelegateAuroraDriver> setupMockDriverAsDelegate() {
     MockDriver md = new MockDriver();
-    DelegateDriver dd = new DelegateDriver("jdbc:aurora://", "jdbc:aurora://", md) {
-      // abstract class
+    DelegateAuroraDriver dd = new DelegateAuroraDriver("jdbc:aurora://", "jdbc:aurora://", md) {
+      @Override
+      public boolean isMasterServer(AuroraServer server, Connection serverConnection) throws SQLException {
+        // default logic matches mysql
+        try (PreparedStatement ps =
+            serverConnection.prepareStatement("SHOW GLOBAL VARIABLES LIKE 'innodb_read_only';")) {
+          try (ResultSet results = ps.executeQuery()) {
+            if (results.next()) {
+              // unless exactly "OFF" database will be considered read only
+              String readOnlyStr = results.getString("Value");
+              if (readOnlyStr.equals("OFF")) {
+                return true;
+              } else if (readOnlyStr.equals("ON")) {
+                return false;
+              } else {
+                throw new IllegalDriverStateException("Unknown db state, may require library upgrade: " + readOnlyStr);
+              }
+            } else {
+              throw new IllegalDriverStateException("No result looking up db state, likely not connected to Aurora database");
+            }
+          }
+        }
+      }
     };
-    for (int i = 0; i < DelegateDriver.DEFAULT_IMPLEMENTATIONS.length; i++) {
-      DelegateDriver.DEFAULT_IMPLEMENTATIONS[i] = 
-          new Pair<String, DelegateDriver>(DelegateDriver.DEFAULT_IMPLEMENTATIONS[i].getLeft(), dd);
+    for (int i = 0; i < DelegateAuroraDriver.DEFAULT_IMPLEMENTATIONS.length; i++) {
+      DelegateAuroraDriver.DEFAULT_IMPLEMENTATIONS[i] = 
+          new Pair<String, DelegateAuroraDriver>(DelegateAuroraDriver.DEFAULT_IMPLEMENTATIONS[i].getLeft(), dd);
     }
     return new Pair<>(md, dd);
   }
 
   public static void resetDriver() {
     for (int i = 0; i < ORIGINAL_DELEGATE_DRIVERS.length; i++) {
-      DelegateDriver.DEFAULT_IMPLEMENTATIONS[i] = ORIGINAL_DELEGATE_DRIVERS[i];
+      DelegateAuroraDriver.DEFAULT_IMPLEMENTATIONS[i] = ORIGINAL_DELEGATE_DRIVERS[i];
     }
   }
 
@@ -54,8 +77,8 @@ public class DelegateMockDriver {
       if (mockConnection == null) {
         mockConnection = mock(Connection.class);
         
-        // mock out the behavior for secondary check
         try {
+          // mock out the behavior for secondary check on mysql
           PreparedStatement mockStatement = mock(PreparedStatement.class);
           ResultSet mockResultSet = mock(ResultSet.class);
           when(mockStatement.executeQuery()).thenReturn(mockResultSet);
@@ -68,6 +91,22 @@ public class DelegateMockDriver {
           
           when(mockConnection.prepareStatement("SHOW GLOBAL VARIABLES LIKE 'innodb_read_only';"))
             .thenReturn(mockStatement);
+          
+          // mock out the behavior for secondary check on psql
+          /*PreparedStatement preapredStatement = mock(PreparedStatement.class);
+          ResultSet resultSet = mock(ResultSet.class);
+          if (! host.equalsIgnoreCase(MASTER_HOST)) {
+            when(resultSet.next()).thenReturn(true, true, false);
+            when(resultSet.getString("server_id")).thenReturn(MASTER_HOST, host);
+            when(resultSet.getString("session_id")).thenReturn(UUID.randomUUID().toString());
+          } else {
+            when(resultSet.next()).thenReturn(true, false);
+            when(resultSet.getString("server_id")).thenReturn(MASTER_HOST);
+            when(resultSet.getString("session_id")).thenReturn("MASTER_SESSION_ID");
+          }
+          
+          when(mockConnection.prepareStatement("SELECT server_id, session_id FROM aurora_replica_status();"))
+            .thenReturn(preapredStatement);*/
         } catch (SQLException e) {
           // not possible
         }

@@ -32,7 +32,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    * @return {@code true} if this connection is able to handled the provided url
    */
   public static boolean acceptsURL(String url) {
-    return DelegateDriver.driverForArcUrl(url) != null;
+    return DelegateAuroraDriver.driverForArcUrl(url) != null;
   }
 
   /* Updates for frequently changed state values is managed by the `ConnectionStateManager`. 
@@ -52,7 +52,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
 
   /**
    * Construct a new connection with the provided url and info.  Aurora servers should be 
-   * delineated by {@code ','}.  Ultimately this will depend on {@link DelegateDriver} to delegate 
+   * delineated by {@code ','}.  Ultimately this will depend on {@link DelegateAuroraDriver} to delegate 
    * to an implementation based off the provided {@code url}.
    * 
    * @param url Servers and connect properties to connect to
@@ -60,7 +60,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    * @throws SQLException Thrown if issue in establishing delegate connections
    */
   public DelegatingAuroraConnection(String url, Properties info) throws SQLException {
-    DelegateDriver dDriver = DelegateDriver.driverForArcUrl(url);
+    DelegateAuroraDriver dDriver = DelegateAuroraDriver.driverForArcUrl(url);
     if (dDriver == null) {
       throw new IllegalArgumentException("Invalid URL: " + url);
     }

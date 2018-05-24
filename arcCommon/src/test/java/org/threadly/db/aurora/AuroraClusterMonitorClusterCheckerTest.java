@@ -24,7 +24,12 @@ public class AuroraClusterMonitorClusterCheckerTest {
   static {
     SERVER_MONITOR_SCHEDULER = new TestableScheduler();
     CLUSTER_SERVERS = new HashMap<>();
-    DelegateDriver dDriver = mock(DelegateDriver.class);
+    DelegateAuroraDriver dDriver = mock(DelegateAuroraDriver.class);
+    try {
+      when(dDriver.isMasterServer(any(AuroraServer.class), any())).thenThrow(new NullPointerException());
+    } catch (SQLException e) {
+      // not possible
+    }
     AuroraServer testServer1 = new AuroraServer("host1", new Properties());
     CLUSTER_SERVERS.put(testServer1, new TestServerMonitor(dDriver, SERVER_MONITOR_SCHEDULER, testServer1));
     AuroraServer testServer2 = new AuroraServer("host2", new Properties());
@@ -66,7 +71,6 @@ public class AuroraClusterMonitorClusterCheckerTest {
     clusterChecker.expediteServerCheck(new AuroraServer("missingFooHost", new Properties()));
 
     assertEquals(0, clusterChecker.serversWaitingExpeditiedCheck.size());
-    
     assertEquals(0, SERVER_MONITOR_SCHEDULER.tick());
   }
   
@@ -83,7 +87,7 @@ public class AuroraClusterMonitorClusterCheckerTest {
   }
   
   private static class TestServerMonitor extends ServerMonitor {
-    protected TestServerMonitor(DelegateDriver driver, SubmitterScheduler scheduler, AuroraServer server) {
+    protected TestServerMonitor(DelegateAuroraDriver driver, SubmitterScheduler scheduler, AuroraServer server) {
       super(driver, server, new TestReschedulingOperation(scheduler));
     }
     

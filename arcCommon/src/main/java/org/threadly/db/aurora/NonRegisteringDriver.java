@@ -42,16 +42,16 @@ public class NonRegisteringDriver extends AbstractArcDriver {
   
   @Override
   public DriverPropertyInfo[] getPropertyInfo(String url, Properties info) throws SQLException {
-    return DelegateDriver.driverForArcUrl(url).getDriver().getPropertyInfo(url, info);
+    return DelegateAuroraDriver.driverForArcUrl(url).getDriver().getPropertyInfo(url, info);
   }
   
   @Override
   public boolean jdbcCompliant() {
-    return DelegateDriver.getAnyDelegateDriver().getDriver().jdbcCompliant();
+    return DelegateAuroraDriver.getAnyDelegateDriver().getDriver().jdbcCompliant();
   }
   
   @Override
   public Logger getParentLogger() throws SQLFeatureNotSupportedException {
-    return DelegateDriver.getAnyDelegateDriver().getDriver().getParentLogger();
+    return DelegateAuroraDriver.getAnyDelegateDriver().getDriver().getParentLogger();
   }
 }

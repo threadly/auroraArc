@@ -273,7 +273,7 @@ public final class AuroraDataSource implements DataSource, Referenceable, Serial
     } else {
       StringBuilder urlSb = new StringBuilder();
                    // TODO - is there a better way to handle when both drivers are loaded?
-      urlSb.append(DelegateDriver.getAnyDelegateDriver().getArcPrefix())
+      urlSb.append(DelegateAuroraDriver.getAnyDelegateDriver().getArcPrefix())
            .append(getServerName()).append(":").append(port).append("/")
            .append(getDatabaseName());
       return urlSb.toString();

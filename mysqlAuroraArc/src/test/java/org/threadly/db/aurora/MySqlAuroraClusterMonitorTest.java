@@ -14,19 +14,36 @@ import java.util.Set;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.threadly.db.aurora.AuroraClusterMonitor;
+import org.threadly.db.aurora.AuroraServer;
+import org.threadly.db.aurora.DelegateAuroraDriver;
+import org.threadly.db.aurora.DelegateMockDriver;
 import org.threadly.db.aurora.DelegateMockDriver.MockDriver;
+import org.threadly.db.aurora.mysql.MySqlDelegateDriver;
 import org.threadly.util.Pair;
 
-public class AuroraClusterMonitorTest {
+public class MySqlAuroraClusterMonitorTest {
   private static final int HOST_START_NUM = 1;
   private static final int HOST_END_NUM = 4;
   private static final int MASTER_HOST = 1;
   
-  private Pair<MockDriver, DelegateDriver> mockDriver;
+  private Pair<MockDriver, DelegateAuroraDriver> mockDriver;
 
+  public static Pair<MockDriver, DelegateAuroraDriver> setupMockDriverAsDelegate() {
+    DelegateMockDriver.class.getName(); // make sure it's loaded
+    
+    MockDriver md = new MockDriver();
+    DelegateAuroraDriver dd = new MySqlDelegateDriver(md);
+    for (int i = 0; i < DelegateAuroraDriver.DEFAULT_IMPLEMENTATIONS.length; i++) {
+      DelegateAuroraDriver.DEFAULT_IMPLEMENTATIONS[i] = 
+          new Pair<String, DelegateAuroraDriver>(DelegateAuroraDriver.DEFAULT_IMPLEMENTATIONS[i].getLeft(), dd);
+    }
+    return new Pair<>(md, dd);
+  }
+  
   @Before
   public void setup() {
-    mockDriver = DelegateMockDriver.setupMockDriverAsDelegate();
+    mockDriver = setupMockDriverAsDelegate();
   }
 
   @After

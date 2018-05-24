@@ -47,6 +47,15 @@ public class AuroraServer implements Comparable<AuroraServer> {
 
     hashCode = host.hashCode() ^ port;
   }
+  
+  /**
+   * Return the hostname for this server.
+   * 
+   * @return Hostname for server instance
+   */
+  public String getHost() {
+    return host;
+  }
 
   @Override
   public boolean equals(Object o) {

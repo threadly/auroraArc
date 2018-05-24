@@ -5,20 +5,21 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.threadly.util.Pair;
+import org.threadly.util.SuppressedStackRuntimeException;
 
 /**
  * Driver for creating connections to a given delegate implementation.  This ultimately deals with 
  * creating a URL that is suited for that driver and then using it to establish the connection.
  */
-public abstract class DelegateDriver {
+public abstract class DelegateAuroraDriver {
   @SuppressWarnings({"unchecked", "rawtypes"})
-  protected static final Pair<String, DelegateDriver>[] DEFAULT_IMPLEMENTATIONS = 
+  protected static final Pair<String, DelegateAuroraDriver>[] DEFAULT_IMPLEMENTATIONS = 
     new Pair[] {attemptInitialization("org.threadly.db.aurora.mysql.MySqlDelegateDriver"), 
                 attemptInitialization("org.threadly.db.aurora.psql.PsqlDelegateDriver")};
   
-  private static Pair<String, DelegateDriver> attemptInitialization(String delegateClass) {
+  private static Pair<String, DelegateAuroraDriver> attemptInitialization(String delegateClass) {
     try {
-      return new Pair<>(delegateClass, (DelegateDriver)Class.forName(delegateClass).newInstance());
+      return new Pair<>(delegateClass, (DelegateAuroraDriver)Class.forName(delegateClass).newInstance());
     } catch (ClassNotFoundException e) {
       return new Pair<>(delegateClass, null);
     } catch (IllegalAccessException | InstantiationException e) {
@@ -31,13 +32,13 @@ public abstract class DelegateDriver {
    * driver implementation being included in the classpath from other artifacts. 
    * 
    * @param url JDBC connect URL
-   * @return A {@link DelegateDriver} if one could be found, or {@code null}
+   * @return A {@link DelegateAuroraDriver} if one could be found, or {@code null}
    */
-  public static DelegateDriver driverForArcUrl(String url) {
+  public static DelegateAuroraDriver driverForArcUrl(String url) {
     if (url == null) {
       return null;
     }
-    for (Pair<String, DelegateDriver> p : DEFAULT_IMPLEMENTATIONS) {
+    for (Pair<String, DelegateAuroraDriver> p : DEFAULT_IMPLEMENTATIONS) {
       if (p.getRight() != null && url.startsWith(p.getRight().arcPrefix)) {
         return p.getRight();
       }
@@ -52,8 +53,8 @@ public abstract class DelegateDriver {
    * 
    * @return The first loaded delegate driver it can find
    */
-  public static DelegateDriver getAnyDelegateDriver() {
-    for (Pair<String, DelegateDriver> p : DEFAULT_IMPLEMENTATIONS) {
+  public static DelegateAuroraDriver getAnyDelegateDriver() {
+    for (Pair<String, DelegateAuroraDriver> p : DEFAULT_IMPLEMENTATIONS) {
       if (p.getRight() != null) {
         return p.getRight();
       }
@@ -65,8 +66,8 @@ public abstract class DelegateDriver {
   protected final String driverConnectPrefix;
   protected final java.sql.Driver delegateDriver;
   
-  protected DelegateDriver(String arcPrefix, String driverConnectPrefix, 
-                           java.sql.Driver delegateDriver) {
+  protected DelegateAuroraDriver(String arcPrefix, String driverConnectPrefix, 
+                                 java.sql.Driver delegateDriver) {
     this.arcPrefix = arcPrefix;
     this.driverConnectPrefix = driverConnectPrefix;
     this.delegateDriver = delegateDriver;
@@ -100,5 +101,28 @@ public abstract class DelegateDriver {
    */
   public Connection connect(String hostAndArgs, Properties info) throws SQLException {
     return delegateDriver.connect(driverConnectPrefix + hostAndArgs, info);
+  }
+
+  /**
+   * Check if the provided server and matching connection are a master server for this drivers 
+   * implementation.
+   * 
+   * @param server The server the connection is associated to
+   * @param serverConnection The connection to execute against the server
+   * @return {@code true} if the provided server and connection are cluster master
+   * @throws SQLException Thrown if there is an error communicating with the server
+   */
+  public abstract boolean isMasterServer(AuroraServer server, Connection serverConnection) throws SQLException;
+  
+  /**
+   * Exception to indicate that the driver is in an invalid state.  Possibly because the 
+   * protocol with the backend is not what the driver expected.
+   */
+  protected static class IllegalDriverStateException extends SuppressedStackRuntimeException {
+    private static final long serialVersionUID = -6537317025944243741L;
+
+    public IllegalDriverStateException(String msg) {
+      super(msg);
+    }
   }
 }

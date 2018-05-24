@@ -1,8 +1,6 @@
 package org.threadly.db.aurora;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
@@ -20,19 +18,20 @@ import java.util.logging.Logger;
 import org.threadly.concurrent.CentralThreadlyPool;
 import org.threadly.concurrent.ReschedulingOperation;
 import org.threadly.concurrent.SubmitterScheduler;
+import org.threadly.db.aurora.DelegateAuroraDriver.IllegalDriverStateException;
 
 /**
  * Class which monitors a "cluster" of aurora servers.  It is expected that for each given cluster
  * there is exactly one master server, and zero or more secondary servers which can be used for
  * reads.  This class will monitor those clusters, providing a monitor through
- * {@link AuroraClusterMonitor#getMonitor(DelegateDriver, Set)}.
+ * {@link AuroraClusterMonitor#getMonitor(DelegateAuroraDriver, Set)}.
  * <p>
  * Currently there is no way to stop monitoring a cluster.  So changes (both additions and removals)
  * of aurora clusters will currently need a JVM restart in order to have the new monitoring behave
  * correctly.
  */
 public class AuroraClusterMonitor {
-  private static final Logger LOG = Logger.getLogger(AuroraClusterMonitor.class.getSimpleName());
+  protected static final Logger LOG = Logger.getLogger(AuroraClusterMonitor.class.getSimpleName());
 
   protected static final int CHECK_FREQUENCY_MILLIS = 500;  // TODO - make configurable
   protected static final int MAXIMUM_THREAD_POOL_SIZE = 64;
@@ -53,7 +52,7 @@ public class AuroraClusterMonitor {
    * @param servers Set of servers within the cluster
    * @return Monitor to select healthy and well balanced cluster servers
    */
-  public static AuroraClusterMonitor getMonitor(DelegateDriver driver, Set<AuroraServer> servers) {
+  public static AuroraClusterMonitor getMonitor(DelegateAuroraDriver driver, Set<AuroraServer> servers) {
     // the implementation of `AbstractSet`'s equals will verify the size, followed by `containsAll`.
     // Since order and other variations should not impact the lookup we just store the provided set 
     // into the map directly for efficency when the same set is provided multiple times
@@ -73,7 +72,7 @@ public class AuroraClusterMonitor {
   private final AtomicLong replicaIndex;  // used to distribute replica reads
 
   protected AuroraClusterMonitor(SubmitterScheduler scheduler, long checkIntervalMillis,
-                                 DelegateDriver driver, Set<AuroraServer> clusterServers) {
+                                 DelegateAuroraDriver driver, Set<AuroraServer> clusterServers) {
     clusterStateChecker = new ClusterChecker(scheduler, checkIntervalMillis, driver, clusterServers);
     replicaIndex = new AtomicLong();
   }
@@ -134,7 +133,7 @@ public class AuroraClusterMonitor {
     private volatile boolean initialized = false; // starts false to avoid updates while constructor is running
 
     protected ClusterChecker(SubmitterScheduler scheduler, long checkIntervalMillis,
-                             DelegateDriver driver, Set<AuroraServer> clusterServers) {
+                             DelegateAuroraDriver driver, Set<AuroraServer> clusterServers) {
       super(scheduler, 0);
 
       this.scheduler = scheduler;
@@ -150,7 +149,7 @@ public class AuroraClusterMonitor {
         if (masterServer.get() == null) {  // check in thread till we find the master
           monitor.run();
           if (monitor.isHealthy()) {
-            if (! monitor.isReadOnly()) {
+            if (monitor.isMasterServer()) {
               masterServer.set(server);
             } else {
               secondaryServers.add(server);
@@ -223,7 +222,13 @@ public class AuroraClusterMonitor {
       
       for (Map.Entry<AuroraServer, ServerMonitor> p : allServers.entrySet()) {
         if (p.getValue().isHealthy()) {
-          if (p.getValue().isReadOnly()) {
+          if (p.getValue().isMasterServer()) {
+            if (! p.getKey().equals(masterServer.get())) {
+              // either already was the master, or now is
+              masterServer.set(p.getKey());
+              LOG.info("New master server: " + p.getKey());
+            }
+          } else {
             if (p.getKey().equals(masterServer.get())) {
               // no longer a master, will need to find the new one
               masterServer.compareAndSet(p.getKey(), null);
@@ -231,12 +236,6 @@ public class AuroraClusterMonitor {
             }
             if (! secondaryServers.contains(p.getKey())) {
               secondaryServers.add(p.getKey());
-            }
-          } else {
-            if (! p.getKey().equals(masterServer.get())) {
-              // either already was the master, or now is
-              masterServer.set(p.getKey());
-              LOG.info("New master server: " + p.getKey());
             }
           }
         } else {
@@ -260,15 +259,15 @@ public class AuroraClusterMonitor {
    * queried.
    */
   protected static class ServerMonitor implements Runnable {
-    protected final DelegateDriver driver;
+    protected final DelegateAuroraDriver driver;
     protected final AuroraServer server;
     protected final ReschedulingOperation clusterStateChecker;
     protected final AtomicBoolean running;
     protected Connection serverConnection;
     protected volatile Throwable lastError;
-    protected volatile boolean readOnly;
+    protected volatile boolean masterServer;
 
-    protected ServerMonitor(DelegateDriver driver, AuroraServer server, 
+    protected ServerMonitor(DelegateAuroraDriver driver, AuroraServer server, 
                             ReschedulingOperation clusterStateChecker) {
       this.driver = driver;
       this.server = server;
@@ -281,7 +280,7 @@ public class AuroraClusterMonitor {
                                      server + ", error is fatal", e);
       }
       lastError = null;
-      readOnly = false;
+      masterServer = false;
     }
     
     protected void reconnect() throws SQLException {
@@ -304,8 +303,8 @@ public class AuroraClusterMonitor {
       return lastError == null;
     }
 
-    public boolean isReadOnly() {
-      return readOnly;
+    public boolean isMasterServer() {
+      return masterServer;
     }
 
     @Override
@@ -322,27 +321,14 @@ public class AuroraClusterMonitor {
 
     protected void updateState() {
       // we can't set our class state directly, as we need to indicate if it has changed
-      boolean currentlyReadOnly = true;
+      boolean currentlyMasterServer = false;
       Throwable currentError = null;
       try {
-        try (PreparedStatement ps =
-                 serverConnection.prepareStatement("SHOW GLOBAL VARIABLES LIKE 'innodb_read_only';")) {
-          try (ResultSet results = ps.executeQuery()) {
-            if (results.next()) {
-              // unless exactly "OFF" database will be considered read only
-              String readOnlyStr = results.getString("Value");
-              if (readOnlyStr.equals("OFF")) {
-                currentlyReadOnly = false;
-              } else if (readOnlyStr.equals("ON")) {
-                currentlyReadOnly = true;
-              } else {
-                LOG.severe("Unknown db state, may require library upgrade: " + readOnlyStr);
-              }
-            } else {
-              LOG.severe("No result looking up db state, likely not connected to Aurora database");
-            }
-          }
-        }
+        currentlyMasterServer = driver.isMasterServer(server, serverConnection);
+      } catch (IllegalDriverStateException e) {
+        // these exceptions are handled different
+        LOG.severe(e.getMessage());
+        currentlyMasterServer = false;
       } catch (Throwable t) {
         currentError = t;
         if (! t.equals(lastError)) {
@@ -350,9 +336,9 @@ public class AuroraClusterMonitor {
                   "Setting aurora server " + server + " as unhealthy due to error checking state", t);
         }
       } finally {
-        if (currentlyReadOnly != readOnly || (lastError == null) != (currentError == null)) {
+        if (currentlyMasterServer != masterServer || ((lastError == null) != (currentError == null))) {
           lastError = currentError;
-          readOnly = currentlyReadOnly;
+          masterServer = currentlyMasterServer;
           clusterStateChecker.signalToRun();
         }
         // reconnect after state has been reflected, don't block till it is for sure known we are unhealthy

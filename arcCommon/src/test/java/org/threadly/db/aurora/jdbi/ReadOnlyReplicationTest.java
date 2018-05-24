@@ -16,7 +16,7 @@ import org.junit.Test;
 import org.skife.jdbi.v2.DBI;
 import org.skife.jdbi.v2.sqlobject.SqlQuery;
 import org.threadly.db.LoggingDriver;
-import org.threadly.db.aurora.DelegateDriver;
+import org.threadly.db.aurora.DelegateAuroraDriver;
 import org.threadly.db.aurora.DelegateMockDriver;
 import org.threadly.db.aurora.Driver;
 import org.threadly.db.aurora.DelegateMockDriver.MockDriver;
@@ -41,7 +41,7 @@ public class ReadOnlyReplicationTest {
     slaveMockConnection = mockDriver.getConnectionForHost(slaveHost);
     masterMockConnection = mockDriver.getConnectionForHost(DelegateMockDriver.MASTER_HOST);
 
-    dbi = new DBI(DelegateDriver.getAnyDelegateDriver().getArcPrefix() +  
+    dbi = new DBI(DelegateAuroraDriver.getAnyDelegateDriver().getArcPrefix() +  
                     slaveHost + "," + DelegateMockDriver.MASTER_HOST + 
                     "/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC",
                   "auroraArc", "");

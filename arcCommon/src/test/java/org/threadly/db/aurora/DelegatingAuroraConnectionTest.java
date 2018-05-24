@@ -27,7 +27,7 @@ public class DelegatingAuroraConnectionTest {
     mockDriver = DelegateMockDriver.setupMockDriverAsDelegate().getLeft();
     mockConnection1 = mockDriver.getConnectionForHost(host);
     mockConnection2 = mockDriver.getConnectionForHost(host + "2");
-    auroraConnection = new DelegatingAuroraConnection(DelegateDriver.getAnyDelegateDriver().getArcPrefix() + 
+    auroraConnection = new DelegatingAuroraConnection(DelegateAuroraDriver.getAnyDelegateDriver().getArcPrefix() + 
                                                         host + "," + host + "2" + 
                                                         "/auroraArc", 
                                                       new Properties());
