@@ -26,7 +26,6 @@ public final class MySqlDelegateDriver extends DelegateAuroraDriver {
    * Construct a new delegate driver for the mysql driver {@code com.mysql.cj.jdbc.Driver}.
    * 
    * @param delegateDriver Driver to use
-   * @throws SQLException Thrown if the mysql driver throws an exception on construction
    */
   public MySqlDelegateDriver(java.sql.Driver delegateDriver) {
     super("jdbc:mysql:aurora://", "jdbc:mysql://", delegateDriver);
