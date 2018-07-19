@@ -96,16 +96,16 @@ project(':arcCommon') {
 
   dependencies {
     testCompile (
-      "junit:junit:4.12",
-      "org.mockito:mockito-core:2.13.0",
-      "org.jdbi:jdbi:2.78",
-      "com.zaxxer:HikariCP:3.1.0",
-      "ch.qos.logback:logback-core:1.2.3",
-      "ch.qos.logback:logback-classic:1.2.3"
+      "junit:junit:$junitVersion",
+      "org.mockito:mockito-core:$mockitoVersion",
+      "org.jdbi:jdbi:$jdbiVersion",
+      "com.zaxxer:HikariCP:$hikariVersion",
+      "ch.qos.logback:logback-core:$logbackVersion",
+      "ch.qos.logback:logback-classic:$logbackVersion"
     )
 
     compile (
-      "org.threadly:threadly:5.21"
+      "org.threadly:threadly:$threadlyVersion"
     )
   }
 }
@@ -116,17 +116,17 @@ project(':mysqlAuroraArc') {
   dependencies {
     testCompile (
       project(':arcCommon').sourceSets.test.output,
-      "junit:junit:4.12",
-      "org.mockito:mockito-core:2.13.0",
-      "org.jdbi:jdbi:2.78",
-      "com.zaxxer:HikariCP:3.1.0",
-      "ch.qos.logback:logback-core:1.2.3",
-      "ch.qos.logback:logback-classic:1.2.3"
+      "junit:junit:$junitVersion",
+      "org.mockito:mockito-core:$mockitoVersion",
+      "org.jdbi:jdbi:$jdbiVersion",
+      "com.zaxxer:HikariCP:$hikariVersion",
+      "ch.qos.logback:logback-core:$logbackVersion",
+      "ch.qos.logback:logback-classic:$logbackVersion"
     )
 
     compile (
       project(":arcCommon"),
-      "mysql:mysql-connector-java:8.0.11"
+      "mysql:mysql-connector-java:$mysqlVersion"
     )
   }
 }
@@ -137,13 +137,13 @@ project(':psqlAuroraArc') {
   dependencies {
     testCompile (
       project(':arcCommon').sourceSets.test.output,
-      "junit:junit:4.12",
-      "org.mockito:mockito-core:2.13.0",
+      "junit:junit:$junitVersion",
+      "org.mockito:mockito-core:$mockitoVersion"
     )
 
     compile (
       project(":arcCommon"),
-      "org.postgresql:postgresql:42.2.2"
+      "org.postgresql:postgresql:$psqlVersion"
     )
   }
 }
