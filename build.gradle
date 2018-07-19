@@ -126,7 +126,7 @@ project(':mysqlAuroraArc') {
 
     compile (
       project(":arcCommon"),
-      "mysql:mysql-connector-java:6.0.6"
+      "mysql:mysql-connector-java:8.0.11"
     )
   }
 }
