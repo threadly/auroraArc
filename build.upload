@@ -29,11 +29,11 @@ subprojects {
     for (String path : java8Paths) {
       if (new java.io.File(path).exists()) {
         println 'Using java 8 rt.jar: ' + path
-        options.bootClasspath = path
+        options.bootstrapClasspath = fileTree(include: ['*.jar'], dir: path)
         break
       }
     }
-    if (options.bootClasspath == null) {
+    if (options.bootstrapClasspath == null) {
       println 'Unable to find java 8 rt.jar, will cause failure so exiting now'
       println ''
       System.exit(1)
@@ -53,7 +53,7 @@ subprojects {
     java8Paths[8] = "/usr/lib/jvm/jdk1.8.0_20/jre/lib/rt.jar"
     for (String path : java8Paths) {
       if (new java.io.File(path).exists()) {
-        options.bootClasspath = path
+        options.bootstrapClasspath = fileTree(include: ['*.jar'], dir: path)
         break
       }
     }
