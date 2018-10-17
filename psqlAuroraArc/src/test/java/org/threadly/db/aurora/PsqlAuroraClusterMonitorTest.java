@@ -7,9 +7,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.HashSet;
 import java.util.Properties;
-import java.util.Set;
 import java.util.UUID;
 
 import org.junit.After;
@@ -53,15 +51,11 @@ public class PsqlAuroraClusterMonitorTest {
     AuroraClusterMonitor.MONITORS.clear();
   }
 
-  private Set<AuroraServer> makeDummySet() {
-    Set<AuroraServer> result = new HashSet<>();
-    for (int i = 1; i <= 3; i++) {
-      if (i != MASTER_HOST) {
-        result.add(new AuroraServer("host" + i + DOMAIN, new Properties()));
-      }
+  private AuroraServer[] makeDummySet() {
+    AuroraServer[] result = new AuroraServer[4];
+    for (int i = 0; i < result.length; i++) {
+      result[result.length - 1 - i] = new AuroraServer("host" + (i + 1) + DOMAIN, new Properties());
     }
-    // add master last
-    result.add(new AuroraServer("host" + MASTER_HOST + DOMAIN, new Properties()));
     return result;
   }
   

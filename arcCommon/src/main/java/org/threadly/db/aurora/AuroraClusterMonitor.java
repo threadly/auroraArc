@@ -5,7 +5,6 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -24,7 +23,7 @@ import org.threadly.db.aurora.DelegateAuroraDriver.IllegalDriverStateException;
  * Class which monitors a "cluster" of aurora servers.  It is expected that for each given cluster
  * there is exactly one master server, and zero or more secondary servers which can be used for
  * reads.  This class will monitor those clusters, providing a monitor through
- * {@link AuroraClusterMonitor#getMonitor(DelegateAuroraDriver, Set)}.
+ * {@link AuroraClusterMonitor#getMonitor(DelegateAuroraDriver, AuroraServer[])}.
  * <p>
  * Currently there is no way to stop monitoring a cluster.  So changes (both additions and removals)
  * of aurora clusters will currently need a JVM restart in order to have the new monitoring behave
@@ -36,7 +35,7 @@ public class AuroraClusterMonitor {
   protected static final int CHECK_FREQUENCY_MILLIS = 500;  // TODO - make configurable
   protected static final int MAXIMUM_THREAD_POOL_SIZE = 64;
   protected static final SubmitterScheduler MONITOR_SCHEDULER;
-  protected static final ConcurrentMap<Set<AuroraServer>, AuroraClusterMonitor> MONITORS;
+  protected static final ConcurrentMap<AuroraServersKey, AuroraClusterMonitor> MONITORS;
 
   static {
     MONITOR_SCHEDULER = CentralThreadlyPool.threadPool(MAXIMUM_THREAD_POOL_SIZE, "auroraMonitor");
@@ -49,30 +48,31 @@ public class AuroraClusterMonitor {
    * long as an equivalent servers set is provided.
    *
    * @param driver DelegateDriver to use for connecting to cluster members if needed
-   * @param servers Set of servers within the cluster
+   * @param servers Set of servers within the cluster, expected to be de-duplicated, but order does not matter
    * @return Monitor to select healthy and well balanced cluster servers
    */
-  public static AuroraClusterMonitor getMonitor(DelegateAuroraDriver driver, Set<AuroraServer> servers) {
+  protected static AuroraClusterMonitor getMonitor(DelegateAuroraDriver driver, AuroraServer[] servers) {
     // the implementation of `AbstractSet`'s equals will verify the size, followed by `containsAll`.
     // Since order and other variations should not impact the lookup we just store the provided set 
-    // into the map directly for efficency when the same set is provided multiple times
+    // into the map directly for efficiency when the same set is provided multiple times
     
-    AuroraClusterMonitor result = MONITORS.get(servers);
+    AuroraServersKey mapKey = new AuroraServersKey(servers);
+    AuroraClusterMonitor result = MONITORS.get(mapKey);
     if (result != null) {
       return result;
     }
     
-    return MONITORS.computeIfAbsent(servers,
+    return MONITORS.computeIfAbsent(mapKey,
                                     (s) -> new AuroraClusterMonitor(MONITOR_SCHEDULER,
                                                                     CHECK_FREQUENCY_MILLIS, 
-                                                                    driver, s));
+                                                                    driver, mapKey.clusterServers));
   }
 
   protected final ClusterChecker clusterStateChecker;
   private final AtomicLong replicaIndex;  // used to distribute replica reads
 
   protected AuroraClusterMonitor(SubmitterScheduler scheduler, long checkIntervalMillis,
-                                 DelegateAuroraDriver driver, Set<AuroraServer> clusterServers) {
+                                 DelegateAuroraDriver driver, AuroraServer[] clusterServers) {
     clusterStateChecker = new ClusterChecker(scheduler, checkIntervalMillis, driver, clusterServers);
     replicaIndex = new AtomicLong();
   }
@@ -116,6 +116,62 @@ public class AuroraClusterMonitor {
   public void expediteServerCheck(AuroraServer auroraServer) {
     clusterStateChecker.expediteServerCheck(auroraServer);
   }
+  
+  /**
+   * Class to provide efficient checks against an array of servers.  This used to be referenced as 
+   * {@code Set<AuroraServer>} but that would result in an iterator being created and iterated 
+   * twice as the hashCode and equality is checked.
+   * 
+   * @since 0.8
+   */
+  private static class AuroraServersKey {
+    private final AuroraServer[] clusterServers;
+    private final int hashCode;
+    
+    public AuroraServersKey(AuroraServer[] clusterServers) {
+      this.clusterServers = clusterServers;
+      int h = 0;
+      for (int i = 0; i < clusterServers.length; i++) {
+        // use addition so order wont matter
+        h += clusterServers[i].hashCode();
+      }
+      this.hashCode = h;
+    }
+    
+    @Override
+    public int hashCode() {
+      return hashCode;
+    }
+    
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      try {
+        AuroraServersKey sk = (AuroraServersKey)o;
+        if (clusterServers.length != sk.clusterServers.length) {
+          return false;
+        } else if (hashCode != sk.hashCode) {
+          return false;
+        }
+        containsAllLoop: for (int i1 = 0; i1 < clusterServers.length; i1++) {
+          if (clusterServers[i1].equals(sk.clusterServers[i1])) {
+            continue containsAllLoop;
+          }
+          for (int i2 = 0; i2 < clusterServers.length; i2++) {
+            if (i2 != i1 && clusterServers[i1].equals(sk.clusterServers[i2])) {
+              continue containsAllLoop;
+            }
+          }
+          return false;
+        }
+        return true;
+      } catch (ClassCastException e) {
+        return false;
+      }
+    }
+  }
 
   /**
    * Checks across the state of all servers as they change to see which are potential primaries and
@@ -133,7 +189,7 @@ public class AuroraClusterMonitor {
     private volatile boolean initialized = false; // starts false to avoid updates while constructor is running
 
     protected ClusterChecker(SubmitterScheduler scheduler, long checkIntervalMillis,
-                             DelegateAuroraDriver driver, Set<AuroraServer> clusterServers) {
+                             DelegateAuroraDriver driver, AuroraServer[] clusterServers) {
       super(scheduler, 0);
 
       this.scheduler = scheduler;

@@ -30,7 +30,7 @@ public class AuroraServer implements Comparable<AuroraServer> {
     }
     this.info = info; // not currently considered in equality or hash
 
-    hashCode = host.hashCode() ^ port;
+    hashCode = this.host.hashCode() ^ port;
   }
 
   /**
@@ -45,7 +45,7 @@ public class AuroraServer implements Comparable<AuroraServer> {
     this.port = port;
     this.info = info; // not currently considered in equality or hash
 
-    hashCode = host.hashCode() ^ port;
+    hashCode = this.host.hashCode() ^ port;
   }
   
   /**

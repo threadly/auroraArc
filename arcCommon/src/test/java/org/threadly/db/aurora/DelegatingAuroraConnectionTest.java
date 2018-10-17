@@ -35,11 +35,28 @@ public class DelegatingAuroraConnectionTest {
 
   @After
   public void cleanup() {
+    try {
+      auroraConnection.close();
+    } catch (Exception ignored) { }
     DelegateMockDriver.resetDriver();
     mockDriver = null;
     mockConnection1 = null;
     mockConnection2 = null;
     AuroraClusterMonitor.MONITORS.clear();
+  }
+  
+  @Test
+  public void serverDeduplicationTest() throws SQLException {
+    cleanup();  // don't use normal test setup
+
+    mockDriver = DelegateMockDriver.setupMockDriverAsDelegate().getLeft();
+    auroraConnection = new DelegatingAuroraConnection(DelegateAuroraDriver.getAnyDelegateDriver().getArcPrefix() + 
+                                                        "fooHost1,fooHost2,fooHost1,fooHost2,fooHost2" +  
+                                                        "/auroraArc", 
+                                                      new Properties());
+    
+    assertEquals(2, auroraConnection.servers.length);
+    assertFalse(auroraConnection.servers[0].equals(auroraConnection.servers[1]));
   }
   
   @Test

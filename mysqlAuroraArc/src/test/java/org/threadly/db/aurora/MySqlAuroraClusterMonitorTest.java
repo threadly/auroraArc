@@ -7,9 +7,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.HashSet;
 import java.util.Properties;
-import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.After;
 import org.junit.Before;
@@ -53,23 +52,33 @@ public class MySqlAuroraClusterMonitorTest {
     AuroraClusterMonitor.MONITORS.clear();
   }
 
-  private Set<AuroraServer> makeDummySet() {
-    Set<AuroraServer> result = new HashSet<>();
-    for (int i = HOST_START_NUM; i <= HOST_END_NUM; i++) {
-      if (i != MASTER_HOST) {
-        result.add(new AuroraServer("host" + i, new Properties()));
+  private AuroraServer[] makeDummySet() {
+    int index = 0;
+    AuroraServer[] result = new AuroraServer[(HOST_END_NUM - HOST_START_NUM) + 1];
+    if (ThreadLocalRandom.current().nextBoolean()) {
+      for (int i = HOST_START_NUM; i <= HOST_END_NUM; i++) {
+        if (i != MASTER_HOST) {
+          result[index++] = new AuroraServer("host" + i, new Properties());
+        }
+      }
+    } else {
+      for (int i = HOST_END_NUM; i >= HOST_START_NUM; i--) {
+        if (i != MASTER_HOST) {
+          result[index++] = new AuroraServer("host" + i, new Properties());
+        }
       }
     }
     // add master last
-    result.add(new AuroraServer("host" + MASTER_HOST, new Properties()));
+    result[index++] = new AuroraServer("host" + MASTER_HOST, new Properties());
     return result;
   }
 
   @Test
   public void getMonitorConsistentResultTest() {
-    AuroraClusterMonitor monitor1 = AuroraClusterMonitor.getMonitor(mockDriver.getRight(), makeDummySet());
-    AuroraClusterMonitor monitor2 = AuroraClusterMonitor.getMonitor(mockDriver.getRight(), makeDummySet());
-    assertTrue(monitor1 == monitor2);
+    AuroraClusterMonitor monitor = AuroraClusterMonitor.getMonitor(mockDriver.getRight(), makeDummySet());
+    for (int i = 0; i < 100; i++) {
+      assertTrue(monitor == AuroraClusterMonitor.getMonitor(mockDriver.getRight(), makeDummySet()));
+    }
   }
   
   private void prepareNormalClusterState() throws SQLException {

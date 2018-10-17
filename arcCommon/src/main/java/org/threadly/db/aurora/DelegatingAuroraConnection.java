@@ -5,7 +5,6 @@ import java.sql.SQLClientInfoException;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
@@ -42,9 +41,9 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    * areas we may move them into the `ConnectionStateManager`, but we want to avoid doing that 
    * unnecessarily so that it does not become burdened with too much state tracking.
    */
-  private final ConnectionStateManager connectionStateManager;
+  protected final ConnectionStateManager connectionStateManager;
+  protected final AuroraServer[] servers;
   private final ConnectionHolder[] connections;
-  private final AuroraServer[] servers;
   private final Connection referenceConnection; // also stored in map, just used to global settings
   private final AuroraClusterMonitor clusterMonitor;
   private final AtomicBoolean closed;
@@ -76,6 +75,17 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
     if (servers.length == 0) {
       throw new IllegalArgumentException("Invalid URL: " + url);
     }
+    // de-duplicate servers if needed
+    int serverCount = servers.length; // can't reference .length again, may contain duplicate records
+    for (int i1 = 0; i1 < serverCount; i1++) {
+      for (int i2 = i1 + 1; i2 < serverCount; i2++) {
+        if (servers[i1].equals(servers[i2])) {
+          serverCount--;
+          System.arraycopy(servers, i2 + 1, servers, i2, serverCount - i2);
+          i2--;
+        }
+      }
+    }
     
     if (urlArgs.contains("optimizedStateUpdates=true")) {
       connectionStateManager = new OptimizedConnectionStateManager();
@@ -83,34 +93,30 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
       connectionStateManager = new SafeConnectionStateManager();
     }
     
-    Map<AuroraServer, ConnectionHolder> connections = new HashMap<>();
     ConnectionHolder firstConnectionHolder = null;
+    this.servers = new AuroraServer[serverCount];
+    this.connections = new ConnectionHolder[serverCount];
     // if we have an error connecting we still build the map (with empty values) so we can alert
     // other connections to check the status
     Pair<AuroraServer, SQLException> connectException = null;
-    for (String s : servers) {
-      AuroraServer auroraServer = new AuroraServer(s, info);
-      if (connections.containsKey(auroraServer)) {
-        continue;
-      }
-      try {
-        connections.put(auroraServer,
-                        connectException != null ? 
-                          null : connectionStateManager.wrapConnection(dDriver.connect(s + urlArgs, info)));
-      } catch (SQLException e) {
-        connectException = new Pair<>(auroraServer, e);
-      }
-      if (connectException == null && firstConnectionHolder == null) {
-        firstConnectionHolder = connections.get(auroraServer);
+    for (int i = 0; i < serverCount; i++) {
+      this.servers[i] = new AuroraServer(servers[i], info);
+      if (connectException == null) {
+        try {
+          connections[i] = connectionStateManager.wrapConnection(dDriver.connect(servers[i] + urlArgs, info));
+          if (firstConnectionHolder == null) {
+            firstConnectionHolder = connections[i];
+          }
+        } catch (SQLException e) {
+          connectException = new Pair<>(this.servers[i], e);
+        }
       }
     }
-    clusterMonitor = AuroraClusterMonitor.getMonitor(dDriver, connections.keySet());
+    clusterMonitor = AuroraClusterMonitor.getMonitor(dDriver, this.servers);
     if (connectException != null) {
       clusterMonitor.expediteServerCheck(connectException.getLeft());
       throw connectException.getRight();
     }
-    this.connections = connections.values().toArray(new ConnectionHolder[connections.size()]);
-    this.servers = connections.keySet().toArray(new AuroraServer[connections.size()]);
     referenceConnection = firstConnectionHolder.uncheckedState();
     closed = new AtomicBoolean();
     stickyConnection = null;
