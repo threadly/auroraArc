@@ -122,7 +122,7 @@ subprojects {
   }
 
   test {
-  maxParallelForks = Math.max(1, (int)(Runtime.getRuntime().availableProcessors() / 4))
+    maxParallelForks = 2
     jacoco {
       excludes = ['**/package-info**','**/*Test']
       destinationFile = file("$buildDir/reports/jacoco/test.exec")

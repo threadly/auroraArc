@@ -5,7 +5,6 @@ import static org.junit.Assert.*;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.Iterator;
 import java.util.List;
 
 import org.junit.After;
@@ -15,6 +14,7 @@ import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 import org.skife.jdbi.v2.DBI;
+import org.skife.jdbi.v2.Handle;
 import org.skife.jdbi.v2.ResultIterator;
 import org.skife.jdbi.v2.StatementContext;
 import org.skife.jdbi.v2.TransactionIsolationLevel;
@@ -42,7 +42,7 @@ public class DriverLocalDbTest {
   protected static DBI DBI;
 
   @BeforeClass
-  public static void setupClass() throws ClassNotFoundException {
+  public static void setupClass() {
     if (LOGGING_DRIVER) {
       LoggingDriver.registerDriver();
     } else {
@@ -50,21 +50,27 @@ public class DriverLocalDbTest {
     }
     DBI = new DBI("jdbc:mysql:" + (LOGGING_DRIVER ? "logging" : "aurora") + "://" +  
                     "127.0.0.1:3306,127.0.0.2:3306,127.0.0.3:3306,127.0.0.4:3306" + 
-                    "/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC" + 
+                    "/auroraArc?" + 
+                    "useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false" + 
                     (OPTIMIZED_DRIVER ? "&optimizedStateUpdates=true" : ""),
                   "auroraArc", "");
   }
   
+  protected Handle h;
   protected JdbiDao dao;
 
   @Before
   public void setup() {
-    dao = DBI.open(JdbiDao.class);
+    h = DBI.open();
+    dao = h.attach(JdbiDao.class);
   }
 
   @After
   public void cleanup() {
     dao.close();
+    dao = null;
+    h.close();
+    h = null;
   }
 
   @Test
@@ -147,9 +153,9 @@ public class DriverLocalDbTest {
 
   @Test
   public void z_lookupRecordsPaged() throws InterruptedException {
-    int expectedCount = dao.recordCount();
+    int expectedCount = Math.min(dao.recordCount(), 10_000);
     int count = 0;
-    Iterator<?> it = dao.lookupAllRecords();
+    ResultIterator<?> it = dao.lookupAllRecords();
     while (it.hasNext()) {
       count++;
       it.next(); // ignore value
@@ -159,8 +165,7 @@ public class DriverLocalDbTest {
 
   @Test
   public void z_lookupRecordsCollection() {
-    dao.lookupRecordsCreatedBefore(new Timestamp(Clock.lastKnownTimeMillis() -
-                                                   Clock.lastKnownForwardProgressingMillis()));
+    dao.lookupRecordsCreatedBefore(new Timestamp(Clock.lastKnownTimeMillis()));
   }
 
   @RegisterMapper(RecordPairMapper.class)
@@ -187,11 +192,11 @@ public class DriverLocalDbTest {
     @SqlQuery("SELECT * FROM records WHERE id = :id")
     public abstract Pair<Long, String> lookupRecord(@Bind("id") int id);
 
-    @SqlQuery("SELECT * FROM records WHERE created_date < :time")
+    @SqlQuery("SELECT * FROM records WHERE created_date < :time LIMIT 10000")
     public abstract List<Pair<Long, String>> lookupRecordsCreatedBefore(@Bind("time") Timestamp timestamp);
 
     @FetchSize(Integer.MIN_VALUE)
-    @SqlQuery("SELECT * FROM records")
+    @SqlQuery("SELECT * FROM records LIMIT 10000")
     public abstract ResultIterator<Pair<Long, String>> lookupAllRecords();
 
     public abstract void close();

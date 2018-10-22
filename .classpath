@@ -20,7 +20,7 @@
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/objenesis-2.6.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/slf4j-api-1.7.25.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/HikariCP-3.2.0.jar"/>
-	<classpathentry kind="lib" path="mysqlAuroraArc/build/dependencies/mysql-connector-java-8.0.12.jar"/>
 	<classpathentry kind="lib" path="psqlAuroraArc/build/dependencies/postgresql-42.2.5.jar"/>
+	<classpathentry kind="lib" path="mysqlAuroraArc/build/dependencies/mysql-connector-java-8.0.13.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
