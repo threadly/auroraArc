@@ -73,7 +73,7 @@ public class DriverLocalDbLoadTest {
       dt.cleanup();
     }
   }
-  
+
   @Test
   public void a1_insertRecord() {
     runLoad(true, 4, RUN_COUNT_REFERENCE / 2, (s) -> s.a1_insertRecord());
@@ -178,15 +178,25 @@ public class DriverLocalDbLoadTest {
   }
 
   @Test
+  public void getDelegateReadOnlyAutoCommit() throws SQLException {
+    getDelegate(true, true);
+  }
+
+  @Test
   public void getDelegate() throws SQLException {
+    getDelegate(false, false);
+  }
+  
+  public void getDelegate(boolean autoCommit, boolean readOnly) throws SQLException {
     try (Handle h = DriverLocalDbTest.DBI.open()) {
       Connection c = h.getConnection();
       if (c instanceof DelegatingAuroraConnection) {
-        c.setAutoCommit(true);
-        c.setReadOnly(true);
+        c.setAutoCommit(autoCommit);
+        c.setReadOnly(readOnly);
         DelegatingAuroraConnection dac = (DelegatingAuroraConnection)c;
         for (int i = 0; i < RUN_COUNT_REFERENCE * 200_000; i++) {
           dac.getDelegate();
+          dac.resetStickyConnection();
         }
       }
     }
