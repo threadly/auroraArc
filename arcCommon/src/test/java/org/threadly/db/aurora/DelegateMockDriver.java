@@ -11,11 +11,9 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
-import java.util.UUID;
 import java.util.logging.Logger;
 
 import org.threadly.db.AbstractArcDriver;
-import org.threadly.db.aurora.DelegateAuroraDriver.IllegalDriverStateException;
 import org.threadly.util.Pair;
 
 public class DelegateMockDriver {
@@ -33,6 +31,11 @@ public class DelegateMockDriver {
   public static Pair<MockDriver, DelegateAuroraDriver> setupMockDriverAsDelegate() {
     MockDriver md = new MockDriver();
     DelegateAuroraDriver dd = new DelegateAuroraDriver("jdbc:aurora://", "jdbc:aurora://", md) {
+      @Override
+      public String getDriverName() {
+        return "MockDriver";
+      }
+      
       @Override
       public boolean isMasterServer(AuroraServer server, Connection serverConnection) throws SQLException {
         // default logic matches mysql

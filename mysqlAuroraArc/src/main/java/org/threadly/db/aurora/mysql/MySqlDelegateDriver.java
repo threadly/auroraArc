@@ -30,6 +30,11 @@ public final class MySqlDelegateDriver extends DelegateAuroraDriver {
   public MySqlDelegateDriver(java.sql.Driver delegateDriver) {
     super("jdbc:mysql:aurora://", "jdbc:mysql://", delegateDriver);
   }
+  
+  @Override
+  public String getDriverName() {
+    return "auroraArc-mysql";
+  }
 
   @Override
   public boolean isMasterServer(AuroraServer server, 

@@ -28,6 +28,11 @@ public class PsqlDelegateDriver extends DelegateAuroraDriver {
   public PsqlDelegateDriver(java.sql.Driver driver) {
     super("jdbc:postgresql:aurora://", "jdbc:postgresql://", driver);
   }
+  
+  @Override
+  public String getDriverName() {
+    return "auroraArc-psql";
+  }
 
   @Override
   public boolean isMasterServer(AuroraServer server, Connection connection) throws SQLException {

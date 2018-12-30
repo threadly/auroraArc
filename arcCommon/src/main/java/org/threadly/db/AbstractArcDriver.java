@@ -4,13 +4,16 @@ package org.threadly.db;
  * Small abstract driver for defining constants for threadly/arc drivers.
  */
 public abstract class AbstractArcDriver implements java.sql.Driver {
+  public static final int ARC_MAJOR_VERSION = 0;
+  public static final int ARC_MINOR_VERSION = 8;
+  
   @Override
   public int getMajorVersion() {
-    return 0;
+    return ARC_MAJOR_VERSION;
   }
 
   @Override
   public int getMinorVersion() {
-    return 1;
+    return ARC_MINOR_VERSION;
   }
 }

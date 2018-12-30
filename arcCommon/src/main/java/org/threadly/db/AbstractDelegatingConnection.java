@@ -45,6 +45,8 @@ public abstract class AbstractDelegatingConnection implements Connection {
   protected abstract Connection getReferenceConnection();
   
   protected abstract void resetStickyConnection();
+  
+  protected abstract String getDriverName();
 
   @Override
   public <T> T unwrap(Class<T> iface) throws SQLException {
@@ -207,7 +209,7 @@ public abstract class AbstractDelegatingConnection implements Connection {
 
   @Override
   public DatabaseMetaData getMetaData() throws SQLException {
-    return getReferenceConnection().getMetaData();
+    return new DelegatingDatabaseMetaData(getReferenceConnection().getMetaData());
   }
 
   @Override
@@ -1768,6 +1770,29 @@ public abstract class AbstractDelegatingConnection implements Connection {
     @Override
     public void setURL(String parameterName, URL val) throws SQLException {
       action((cs) -> { cs.setURL(parameterName, val); return null; });
+    }
+  }
+  
+  /**
+   * Implementation of {@link WrappingDatabaseMetaData} where the driver name is provided from the 
+   * extending class and the connection reference is pointed correctly to this instance.  In 
+   * addition {@link WrappingDatabaseMetaData} will fix version responses to match auroraArc.
+   * 
+   * @since 0.8
+   */
+  protected class DelegatingDatabaseMetaData extends WrappingDatabaseMetaData {
+    public DelegatingDatabaseMetaData(DatabaseMetaData delegate) {
+      super(delegate);
+    }
+
+    @Override
+    public String getDriverName() {
+      return AbstractDelegatingConnection.this.getDriverName();
+    }
+
+    @Override
+    public Connection getConnection() {
+      return AbstractDelegatingConnection.this;
     }
   }
 }

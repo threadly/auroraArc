@@ -43,6 +43,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    */
   protected final ConnectionStateManager connectionStateManager;
   protected final AuroraServer[] servers;
+  private final String driverName;
   private final ConnectionHolder[] connections;
   private final Connection referenceConnection; // also stored in map, just used to global settings
   private final AuroraClusterMonitor clusterMonitor;
@@ -63,6 +64,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
     if (dDriver == null) {
       throw new IllegalArgumentException("Invalid URL: " + url);
     }
+    driverName = dDriver.getDriverName();
     
     int endDelim = url.indexOf('/', dDriver.getArcPrefix().length());
     if (endDelim < 0) {
@@ -121,7 +123,13 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
     closed = new AtomicBoolean();
     stickyConnection = null;
   }
+  
+  @Override
+  protected String getDriverName() {
+    return driverName;
+  }
 
+  @Override
   protected void resetStickyConnection() {
     stickyConnection = null;
   }

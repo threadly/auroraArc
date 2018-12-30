@@ -90,6 +90,13 @@ public abstract class DelegateAuroraDriver {
   public java.sql.Driver getDriver() {
     return delegateDriver;
   }
+  
+  /**
+   * Get the name for this driver.
+   * 
+   * @return The name for the driver
+   */
+  public abstract String getDriverName();
 
   /**
    * Connect using the delegate driver.
