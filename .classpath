@@ -9,18 +9,18 @@
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/threadly"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
-	<classpathentry kind="lib" path="arcCommon/build/dependencies/byte-buddy-1.7.9.jar"/>
-	<classpathentry kind="lib" path="arcCommon/build/dependencies/byte-buddy-agent-1.7.9.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/hamcrest-core-1.3.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/jdbi-2.78.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/junit-4.12.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/logback-classic-1.2.3.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/logback-core-1.2.3.jar"/>
-	<classpathentry kind="lib" path="arcCommon/build/dependencies/mockito-core-2.13.0.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/objenesis-2.6.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/slf4j-api-1.7.25.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/HikariCP-3.2.0.jar"/>
 	<classpathentry kind="lib" path="psqlAuroraArc/build/dependencies/postgresql-42.2.5.jar"/>
 	<classpathentry kind="lib" path="mysqlAuroraArc/build/dependencies/mysql-connector-java-8.0.13.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/byte-buddy-1.7.9.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/byte-buddy-agent-1.7.9.jar"/>
+	<classpathentry kind="lib" path="build/dependencies/mockito-core-2.13.0.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
