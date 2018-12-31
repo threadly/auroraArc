@@ -15,6 +15,11 @@ import java.sql.SQLException;
 public abstract class WrappingDatabaseMetaData implements DatabaseMetaData {
   protected final DatabaseMetaData delegate;
   
+  /**
+   * Construct a new {@link WrappingDatabaseMetaData} with the provided delegate.
+   * 
+   * @param delegate Delegate to use for non-overridden functions
+   */
   public WrappingDatabaseMetaData(DatabaseMetaData delegate) {
     this.delegate = delegate;
   }
