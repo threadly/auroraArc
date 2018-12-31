@@ -3,6 +3,7 @@ package org.threadly.db.aurora;
 import static org.junit.Assert.*;
 
 import java.sql.ResultSet;
+import java.sql.SQLClientInfoException;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
@@ -31,6 +32,7 @@ import org.threadly.concurrent.UnfairExecutor;
 import org.threadly.db.LoggingDriver;
 import org.threadly.db.aurora.Driver;
 import org.threadly.util.Clock;
+import org.threadly.util.ExceptionUtils;
 import org.threadly.util.Pair;
 import org.threadly.util.StringUtils;
 import org.threadly.util.SuppressedStackRuntimeException;
@@ -88,8 +90,50 @@ public class DriverLocalDbTest {
   }
 
   @Test
-  public void a1_insertRecord() {
+  public void a1_insertRecordSmart() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART);
     dao.insertRecord(StringUtils.makeRandomString(5));
+  }
+
+  @Test
+  public void a1_insertRecordAny() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY);
+    dao.insertRecord(StringUtils.makeRandomString(5));
+  }
+
+  @Test
+  public void a1_insertRecordMasterPrefered() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED);
+    dao.insertRecord(StringUtils.makeRandomString(5));
+  }
+
+  @Test
+  public void a1_insertRecordMasterOnly() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY);
+    dao.insertRecord(StringUtils.makeRandomString(5));
+  }
+
+  @Test
+  public void a1_insertRecordSlavePrefered() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED);
+    dao.insertRecord(StringUtils.makeRandomString(5));
+  }
+
+  @Test
+  public void a1_insertRecordSlaveOnlyFail() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY);
+    try {
+      dao.insertRecord(StringUtils.makeRandomString(5));
+      fail("Exception should have thrown");
+    } catch (Exception e) {
+      assertTrue(ExceptionUtils.hasCauseOfType(e, DelegatingAuroraConnection.NoAuroraServerException.class));
+    }
   }
 
   @Test
@@ -116,9 +160,67 @@ public class DriverLocalDbTest {
   }
 
   @Test
-  public void a3_lookupSingleRecord() {
+  public void a3_lookupSingleRecordSmart() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART);
     Pair<Long, String> p = dao.lookupRecord(1);
     assertNotNull(p);
+  }
+
+  @Test
+  public void a3_lookupSingleRecordAny() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY);
+    Pair<Long, String> p = dao.lookupRecord(1);
+    assertNotNull(p);
+  }
+
+  @Test
+  public void a3_lookupSingleRecordMasterPrefered() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED);
+    Pair<Long, String> p = dao.lookupRecord(1);
+    assertNotNull(p);
+  }
+
+  @Test
+  public void a3_lookupSingleRecordMasterOnly() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY);
+    Pair<Long, String> p = dao.lookupRecord(1);
+    assertNotNull(p);
+  }
+
+  @Test
+  public void a3_lookupSingleRecordSlavePrefered() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED);
+    Pair<Long, String> p = dao.lookupRecord(1);
+    assertNotNull(p);
+  }
+
+  @Test
+  public void a3_lookupSingleRecordSlaveOnlyFail() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY);
+    try {
+      dao.lookupRecord(1);
+      fail("Exception should have thrown");
+    } catch (Exception e) {
+      assertTrue(ExceptionUtils.hasCauseOfType(e, DelegatingAuroraConnection.NoAuroraServerException.class));
+    }
+  }
+
+  @Test
+  public void a3_lookupSingleRecordFirstHalfSlaveOnlyFail() throws SQLClientInfoException {
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_1_REPLICA_ONLY);
+    try {
+      dao.lookupRecord(1);
+      fail("Exception should have thrown");
+    } catch (Exception e) {
+      assertTrue(ExceptionUtils.hasCauseOfType(e, DelegatingAuroraConnection.NoAuroraServerException.class));
+    }
   }
 
   @Test

@@ -1,6 +1,8 @@
 package org.threadly.db.aurora;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
 import java.sql.SQLClientInfoException;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
@@ -8,12 +10,14 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.threadly.db.AbstractDelegatingConnection;
 import org.threadly.db.aurora.DelegatingAuroraConnection.ConnectionStateManager.ConnectionHolder;
 import org.threadly.util.Clock;
 import org.threadly.util.Pair;
+import org.threadly.util.StringUtils;
 
 /**
  * Implementation of {@link Connection} which under the hood delegates to one of several 
@@ -24,6 +28,90 @@ import org.threadly.util.Pair;
  * distribute load if possible, and to handle fail over conditions with minimal impact.
  */
 public class DelegatingAuroraConnection extends AbstractDelegatingConnection implements Connection {
+  /**
+   * Used with {@link #setClientInfo(String, String)} and {@link #setClientInfo(Properties)} to 
+   * control which delegate connection should be used.  Possible values are:
+   * <ul>
+   * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART} (default) - Will provide a replica server if likely safe
+   * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY} - Will provide any server available
+   * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED} - Will try to provide the master
+   * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY} - Will only provide a healthy master
+   * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED} - Will try to provide a random replica
+   * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY} - Will only provide a healthy replica
+   * </ul>
+   */
+  public static final String CLIENT_INFO_NAME_DELEGATE_CHOICE = "DelegateChoice";
+  /**
+   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
+   * {@link #setClientInfo(String, String)}.
+   * <p>
+   * This value will randomly choose either a master or replica server in a normalized distribution.
+   */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY = "Any";
+  /**
+   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
+   * {@link #setClientInfo(String, String)}.
+   * <p>
+   * This value will choose a replica server if the connection is read only and the driver believes 
+   * it is safe to do so.  If a the preferred server type is unhealthy it will fallback to either 
+   * the master or a replica if possible.
+   */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART = "Smart";
+  /**
+   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
+   * {@link #setClientInfo(String, String)}.
+   * <p>
+   * This value will try to always provide the master, unless it is unhealthy, in which case a 
+   * replica will be used.  If no servers are healthy a {@link NoAuroraServerException} will be 
+   * thrown.
+   */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED = "MasterPrefered";
+  /**
+   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
+   * {@link #setClientInfo(String, String)}.
+   * <p>
+   * This value will ONLY provide the master server, choosing to fail the request with a 
+   * {@link NoAuroraServerException} if the master is unhealthy.
+   */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY = "MasterOnly";
+  /**
+   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
+   * {@link #setClientInfo(String, String)}.
+   * <p>
+   * This value will try to always provide a random replica, unless none are healthy, in which case 
+   * the master will be used.  If no servers are healthy a {@link NoAuroraServerException} will be 
+   * thrown.
+   */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED = "ReplicaPrefered";
+  /**
+   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
+   * {@link #setClientInfo(String, String)}.
+   * <p>
+   * This value will ONLY provide a random replica server, choosing to fail the request with a 
+   * {@link NoAuroraServerException} if there are no healthy replicas.
+   */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY = "ReplicaOnly";
+  /**
+   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
+   * {@link #setClientInfo(String, String)}.
+   * <p>
+   * This value will ONLY provide a random replica server from the first half of the available 
+   * cluster.  If there is no available replica's the request will fail with a 
+   * {@link NoAuroraServerException}.
+   */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_1_REPLICA_ONLY = "ReplicaPart1Only";
+  /**
+   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
+   * {@link #setClientInfo(String, String)}.
+   * <p>
+   * This value will ONLY provide a random replica server from the second half of the available 
+   * cluster.  This requires a minimum of {@code 2} healthy replica servers.  If one or no replicas 
+   * are healthy a {@link NoAuroraServerException} will be thrown.
+   */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_2_REPLICA_ONLY = "ReplicaPart2Only";
+  protected static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT = // may be set by providing null or empty
+      CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART;
+  
   /**
    * Check if a given URL is accepted by this connection.
    * 
@@ -43,6 +131,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    */
   protected final ConnectionStateManager connectionStateManager;
   protected final AuroraServer[] servers;
+  protected volatile String delegateChoice; // visible for testing
   private final String driverName;
   private final ConnectionHolder[] connections;
   private final Connection referenceConnection; // also stored in map, just used to global settings
@@ -94,6 +183,8 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
     } else {
       connectionStateManager = new SafeConnectionStateManager();
     }
+    
+    delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT;
     
     ConnectionHolder firstConnectionHolder = null;
     this.servers = new AuroraServer[serverCount];
@@ -183,6 +274,11 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
   }
 
   @Override
+  public DatabaseMetaData getMetaData() throws SQLException {
+    return new DelegatingAuroraDatabaseMetaData(referenceConnection.getMetaData());
+  }
+
+  @Override
   protected <R> R processOnDelegate(SQLOperation<Connection, R> action) throws SQLException {
     Pair<AuroraServer, ConnectionHolder> p = getDelegate();
     try {
@@ -204,20 +300,25 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
       }
 
       AuroraServer server;
-      if (connectionStateManager.isReadOnly()) {
-        server = clusterMonitor.getRandomReadReplica();
-        if (server == null) {
-          server = clusterMonitor.getCurrentMaster();
-        }
+      if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART.equals(delegateChoice)) {
+        server = getAuroraServerSmart();
+      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED.equals(delegateChoice)) {
+        server = getAuroraServerMasterPrefered();
+      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED.equals(delegateChoice)) {
+        server = getAuroraServerReplicaPrefered();
+      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY.equals(delegateChoice)) {
+        server = getAuroraServerMasterOnly();
+      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY.equals(delegateChoice)) {
+        server = getAuroraServerReplicaOnly();
+      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_1_REPLICA_ONLY.equals(delegateChoice)) {
+        server = getAuroraServerReplicaHalf1Only();
+      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_2_REPLICA_ONLY.equals(delegateChoice)) {
+        server = getAuroraServerReplicaHalf2Only();
+      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY.equals(delegateChoice)) {
+        server = getAuroraServerAny();
       } else {
-        server = clusterMonitor.getCurrentMaster();
-        if (server == null) {
-          // we will _try_ to use a read only replica, since no master exists, lets hope this is a read
-          server = clusterMonitor.getRandomReadReplica();
-        }
-      }
-      if (server == null) {
-        throw new SQLException("No healthy servers");
+        delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT; // reset to prevent further failures
+        throw new IllegalStateException("Unknown delegate choice: " + delegateChoice);
       }
       // server should be guaranteed to be in map
       for (int i = 0; i < servers.length; i++) {
@@ -229,8 +330,108 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
           return result;
         }
       }
-      throw new IllegalStateException("Cluster monitor provided unknown server");
+      throw new IllegalStateException("Cluster monitor provided unknown server: " + server);
     }
+  }
+  
+  protected AuroraServer getAuroraServerSmart() throws SQLException {
+    if (connectionStateManager.isReadOnly()) {
+      return getAuroraServerReplicaPrefered();
+    } else {
+      return getAuroraServerMasterPrefered();
+    }
+  }
+  
+  protected AuroraServer getAuroraServerMasterPrefered() throws SQLException {
+    AuroraServer server = clusterMonitor.getCurrentMaster();
+    if (server == null) {
+      // we will _try_ to use a read only replica, since no master exists, lets hope this is a read
+      server = clusterMonitor.getRandomReadReplica();
+    }
+    if (server == null) {
+      throw new NoAuroraServerException("No healthy servers");
+    }
+    return server;
+  }
+  
+  protected AuroraServer getAuroraServerMasterOnly() throws SQLException {
+    AuroraServer server = clusterMonitor.getCurrentMaster();
+    if (server == null) {
+      throw new NoAuroraServerException("No healthy master server");
+    }
+    return server;
+  }
+  
+  protected AuroraServer getAuroraServerReplicaPrefered() throws SQLException {
+    AuroraServer server = clusterMonitor.getRandomReadReplica();
+    if (server == null) {
+      server = clusterMonitor.getCurrentMaster();
+    }
+    if (server == null) {
+      throw new NoAuroraServerException("No healthy servers");
+    }
+    return server;
+  }
+  
+  protected AuroraServer getAuroraServerReplicaOnly() throws SQLException {
+    AuroraServer server = clusterMonitor.getRandomReadReplica();
+    if (server == null) {
+      throw new NoAuroraServerException("No healthy replica servers");
+    }
+    return server;
+  }
+  
+  protected AuroraServer getAuroraServerReplicaHalf1Only() throws SQLException {
+    int secondaryCount = clusterMonitor.getHealthyReplicaCount();
+    AuroraServer server;
+    if (secondaryCount > 2) {
+      server = clusterMonitor.getReadReplica(ThreadLocalRandom.current().nextInt(secondaryCount / 2));
+    } else {
+      server = clusterMonitor.getReadReplica(0);
+    }
+    if (server == null) {
+      throw new NoAuroraServerException("No healthy replica servers");
+    }
+    return server;
+  }
+  
+  protected AuroraServer getAuroraServerReplicaHalf2Only() throws SQLException {
+    int secondaryCount = clusterMonitor.getHealthyReplicaCount();
+    AuroraServer server = null;
+    if (secondaryCount > 2) {
+      int halfStart = secondaryCount / 2;
+      server = clusterMonitor.getReadReplica(halfStart + ThreadLocalRandom.current().nextInt(halfStart));
+    } else {
+      server = clusterMonitor.getReadReplica(1);
+    }
+    if (server == null) {
+      if (secondaryCount == 0) {
+        throw new NoAuroraServerException("No healthy replica servers");
+      } else {
+        throw new NoAuroraServerException("Only one healthy replica server");
+      }
+    }
+    return server;
+  }
+  
+  protected AuroraServer getAuroraServerAny() throws SQLException {
+    int secondaryCount = clusterMonitor.getHealthyReplicaCount();
+    AuroraServer server;
+    if (secondaryCount == 0 || ThreadLocalRandom.current().nextInt(secondaryCount + 1) == 0) {
+      server = clusterMonitor.getCurrentMaster();
+      if (server == null) {
+        server = clusterMonitor.getRandomReadReplica(); // retry with secondary
+      }
+    } else {
+      server = clusterMonitor.getRandomReadReplica();
+      if (server == null) {
+        server = clusterMonitor.getCurrentMaster(); // retry with master
+      }
+    }
+    if (server == null) {
+      throw new NoAuroraServerException("No healthy servers");
+    }
+    return server;
   }
 
   @Override
@@ -337,19 +538,50 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
 
   @Override
   public void setClientInfo(String name, String value) throws SQLClientInfoException {
-    synchronized (connections) {
-      for (ConnectionHolder ch : connections) {
-        ch.uncheckedState().setClientInfo(name, value);
+    if (CLIENT_INFO_NAME_DELEGATE_CHOICE.equals(name)) {
+      setDelegateChoice(value);
+    } else {
+      synchronized (connections) {
+        for (ConnectionHolder ch : connections) {
+          ch.uncheckedState().setClientInfo(name, value);
+        }
       }
     }
   }
 
   @Override
   public void setClientInfo(Properties properties) throws SQLClientInfoException {
+    Object delegateChoice = properties.remove(CLIENT_INFO_NAME_DELEGATE_CHOICE);
+    setDelegateChoice(delegateChoice == null ? null : delegateChoice.toString());
+    
     synchronized (connections) {
       for (ConnectionHolder ch : connections) {
         ch.uncheckedState().setClientInfo(properties);
       }
+    }
+  }
+  
+  protected void setDelegateChoice(String choice) {
+    if (StringUtils.isNullOrEmpty(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_1_REPLICA_ONLY.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_1_REPLICA_ONLY;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_2_REPLICA_ONLY.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_2_REPLICA_ONLY;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY;
+    } else {
+      throw new UnsupportedOperationException("Unknown delegate choice: " + choice);
     }
   }
 
@@ -592,6 +824,51 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
   
         return connection;
       }
+    }
+  }
+  
+  /**
+   * Extended implementation of {@link DelegatingDatabaseMetaData} so that implementation specific 
+   * modifications can be made.  Specifically including the client info properties which this 
+   * implementation supports.
+   * 
+   * @since 0.8
+   */
+  protected class DelegatingAuroraDatabaseMetaData extends DelegatingDatabaseMetaData {
+    protected DelegatingAuroraDatabaseMetaData(DatabaseMetaData delegate) {
+      super(delegate);
+    }
+    
+    @Override
+    public ResultSet getClientInfoProperties() throws SQLException {
+      // TODO - provide ResultSet that defines our properties:
+      /*
+        rs.moveToInsertRow();
+        rs.updateString("NAME", CLIENT_INFO_NAME_DELEGATE_CHOICE);
+        rs.updateInt("MAX_LEN", );
+        rs.updateString("DEFAULT_VALUE", CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT);
+        rs.updateString("DESCRIPTION", "Specify how the delegate connection should be chosen");
+        rs.insertRow();
+        rs.moveToCurrentRow();
+      */
+
+      return delegate.getClientInfoProperties();
+    }
+  }
+  
+  /**
+   * Exception thrown when we there is no delegate aurora server that can be used.  This is most 
+   * common when there is either no healthy servers in the cluster, or when the servers to be used 
+   * is restricted by passing in {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} modifiers to 
+   * {@link #setClientInfo(String, String)}.
+   * 
+   * @since 0.8
+   */
+  public static class NoAuroraServerException extends SQLException {
+    private static final long serialVersionUID = -5962577973983028183L;
+
+    protected NoAuroraServerException(String msg) {
+      super(msg);
     }
   }
 }

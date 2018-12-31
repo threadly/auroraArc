@@ -1,6 +1,7 @@
 package org.threadly.db.aurora;
 
 import java.sql.Connection;
+import java.sql.SQLClientInfoException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,7 +77,13 @@ public class DriverLocalDbLoadTest {
 
   @Test
   public void a1_insertRecord() {
-    runLoad(true, 4, RUN_COUNT_REFERENCE / 2, (s) -> s.a1_insertRecord());
+    runLoad(true, 4, RUN_COUNT_REFERENCE / 2, (s) -> {
+      try {
+        s.a1_insertRecordSmart();
+      } catch (SQLClientInfoException e) {
+        throw new RuntimeException(e);
+      }
+    });
   }
 
   @Test
@@ -92,7 +99,13 @@ public class DriverLocalDbLoadTest {
 
   @Test
   public void a3_lookupSingleRecord() {
-    runLoad(true, 32, RUN_COUNT_REFERENCE * 100, (s) -> s.a3_lookupSingleRecord());
+    runLoad(true, 32, RUN_COUNT_REFERENCE * 100, (s) -> {
+      try {
+        s.a3_lookupSingleRecordSmart();
+      } catch (SQLClientInfoException e) {
+        throw new RuntimeException(e);
+      }
+    });
   }
 
   @Test

@@ -20,6 +20,11 @@ import java.sql.SQLException;
  * <ul>
  * <li>{@code "optimizedStateUpdates=true"} - Experimental internal code that can provide performance gains
  * </ul>
+ * Possible {@link DelegatingAuroraConnection} configuration (used through 
+ * {@link DelegatingAuroraConnection#setClientInfo(String, String)}):
+ * <ul>
+ * <li>{@link DelegatingAuroraConnection#CLIENT_INFO_NAME_DELEGATE_CHOICE} - Specify how the connection is chosen
+ * </ul>
  */
 public class Driver extends NonRegisteringDriver {
   static {

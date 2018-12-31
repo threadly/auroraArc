@@ -76,6 +76,16 @@ public class AuroraClusterMonitor {
     clusterStateChecker = new ClusterChecker(scheduler, checkIntervalMillis, driver, clusterServers);
     replicaIndex = new AtomicLong();
   }
+  
+  /**
+   * Getter for the current number of healthy replicate servers known in the cluster.  The master 
+   * server is not included in this count.
+   * 
+   * @return The number of healthy replica servers in the cluster
+   */
+  public int getHealthyReplicaCount() {
+    return clusterStateChecker.secondaryServers.size();
+  }
 
   /**
    * Return a random read only replica server.
@@ -83,17 +93,42 @@ public class AuroraClusterMonitor {
    * @return Random read only replica server, or {@code null} if no servers are healthy
    */
   public AuroraServer getRandomReadReplica() {
-    long replicaIndex = this.replicaIndex.getAndIncrement();
-    int secondaryCount;
-    // may loop if secondary server becomes unhealthy during check
-    while ((secondaryCount = clusterStateChecker.secondaryServers.size()) > 0) {
+    while (true) {
+      int secondaryCount = clusterStateChecker.secondaryServers.size();
       try {
-        return clusterStateChecker.secondaryServers.get((int)(replicaIndex % secondaryCount));
+        if (secondaryCount == 1) {
+          return clusterStateChecker.secondaryServers.get(0);
+        } else if (secondaryCount == 0) {
+          return null;
+        } else {
+          long replicaIndex = this.replicaIndex.getAndIncrement();
+          return clusterStateChecker.secondaryServers.get((int)(replicaIndex % secondaryCount));
+        }
       } catch (IndexOutOfBoundsException e) {
         // secondary server was removed during check, loop and retry
       }
     }
-    return null;
+  }
+  
+  /**
+   * Return a read replica which corresponds to an index.  A given index may not always provide the 
+   * same server depending on membership changes or other re-ordering that may occur.  But should 
+   * provide a basic way to get varying servers when the internal randomization mechanism is not 
+   * desired.
+   * 
+   * @param index Zero based index of replica to provide
+   * @return Read only replica server, or {@code null} if no servers was at the provided index
+   */
+  public AuroraServer getReadReplica(int index) {
+    if (clusterStateChecker.secondaryServers.size() <= index) {
+      return null;
+    }
+    try {
+      return clusterStateChecker.secondaryServers.get(index);
+    } catch (IndexOutOfBoundsException e) {
+      // secondary server was removed after check
+      return null;
+    }
   }
 
   /**

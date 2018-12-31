@@ -4,6 +4,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import java.sql.Connection;
+import java.sql.SQLClientInfoException;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
 import java.util.Properties;
@@ -13,9 +14,14 @@ import org.junit.Before;
 import org.junit.Test;
 import org.threadly.concurrent.SameThreadSubmitterExecutor;
 import org.threadly.db.aurora.DelegateMockDriver.MockDriver;
+import org.threadly.db.aurora.DelegatingAuroraConnection.NoAuroraServerException;
+import org.threadly.test.concurrent.TestCondition;
 import org.threadly.util.StringUtils;
 
 public class DelegatingAuroraConnectionTest {
+  private static final String MASTER_HOST = DelegateMockDriver.MASTER_HOST;
+  private static final String REPLICA_HOST = "fooHost";
+  
   private MockDriver mockDriver;
   private Connection mockConnection1;
   private Connection mockConnection2;
@@ -23,14 +29,23 @@ public class DelegatingAuroraConnectionTest {
 
   @Before
   public void setup() throws SQLException {
-    String host = "fooHost";
     mockDriver = DelegateMockDriver.setupMockDriverAsDelegate().getLeft();
-    mockConnection1 = mockDriver.getConnectionForHost(host);
-    mockConnection2 = mockDriver.getConnectionForHost(host + "2");
+    mockConnection1 = mockDriver.getConnectionForHost(MASTER_HOST);
+    mockConnection2 = mockDriver.getConnectionForHost(REPLICA_HOST);
     auroraConnection = new DelegatingAuroraConnection(DelegateAuroraDriver.getAnyDelegateDriver().getArcPrefix() + 
-                                                        host + "," + host + "2" + 
+                                                      MASTER_HOST + "," + REPLICA_HOST + 
                                                         "/auroraArc", 
                                                       new Properties());
+    new TestCondition(() -> {
+      try {
+        auroraConnection.getAuroraServerReplicaOnly();
+        return true;
+      } catch (NoAuroraServerException e) {
+        return false; // wait till cluster is fully initialized
+      } catch (SQLException e) {
+        throw new RuntimeException(e);
+      }
+    }).blockTillTrue();
   }
 
   @After
@@ -57,6 +72,116 @@ public class DelegatingAuroraConnectionTest {
     
     assertEquals(2, auroraConnection.servers.length);
     assertFalse(auroraConnection.servers[0].equals(auroraConnection.servers[1]));
+  }
+  
+  @Test
+  public void setClientInfoDelegateDefaultTest() throws SQLClientInfoException {
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART, 
+                 DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT);
+    
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, null);
+    
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT, 
+                 auroraConnection.delegateChoice);
+    
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, "");
+    
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT, 
+                 auroraConnection.delegateChoice);
+  }
+  
+  @Test
+  public void getDelegateSmartTest() throws SQLException {
+    auroraConnection.setAutoCommit(true);
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART);
+    
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT, 
+                 auroraConnection.delegateChoice);
+    
+    assertEquals(MASTER_HOST, auroraConnection.getDelegate().getLeft().getHost());
+    
+    auroraConnection.setReadOnly(true);
+    
+    assertEquals(REPLICA_HOST, auroraConnection.getDelegate().getLeft().getHost());
+  }
+  
+  @Test
+  public void getDelegateAnyTest() throws SQLException {
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY);
+    
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY, 
+                 auroraConnection.delegateChoice);
+    
+    assertNotNull(auroraConnection.getDelegate());
+  }
+  
+  @Test
+  public void getDelegateMasterPrefered() throws SQLException {
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED);
+    
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED, 
+                 auroraConnection.delegateChoice);
+    
+    assertEquals(MASTER_HOST, auroraConnection.getDelegate().getLeft().getHost());
+  }
+  
+  @Test
+  public void getDelegateMasterOnly() throws SQLException {
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY);
+    
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY, 
+                 auroraConnection.delegateChoice);
+    
+    assertEquals(MASTER_HOST, auroraConnection.getDelegate().getLeft().getHost());
+  }
+  
+  @Test
+  public void getDelegateReplicaPefered() throws SQLException {
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED);
+    
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED, 
+                 auroraConnection.delegateChoice);
+    
+    assertEquals(REPLICA_HOST, auroraConnection.getDelegate().getLeft().getHost());
+  }
+  
+  @Test
+  public void getDelegateReplicaOnly() throws SQLException {
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY);
+    
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY, 
+                 auroraConnection.delegateChoice);
+    
+    assertEquals(REPLICA_HOST, auroraConnection.getDelegate().getLeft().getHost());
+  }
+  
+  @Test
+  public void getDelegateFirstHalfReplicaOnly() throws SQLException {
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_1_REPLICA_ONLY);
+    
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_1_REPLICA_ONLY, 
+                 auroraConnection.delegateChoice);
+    
+    assertEquals(REPLICA_HOST, auroraConnection.getDelegate().getLeft().getHost());
+  }
+  
+  @Test (expected = NoAuroraServerException.class)
+  public void getDelegateSecondHalfReplicaFail() throws SQLException {
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
+                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_2_REPLICA_ONLY);
+    
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_2_REPLICA_ONLY, 
+                 auroraConnection.delegateChoice);
+    
+    auroraConnection.getDelegate();
+    fail("Exception should have thrown");
   }
   
   @Test
@@ -128,6 +253,19 @@ public class DelegatingAuroraConnectionTest {
     
     verify(mockConnection1).setClientInfo(name, value);
     verify(mockConnection2).setClientInfo(name, value);
+  }
+  
+  @Test
+  public void setClientInfoPropertiesTest() throws SQLException {
+    String name = StringUtils.makeRandomString(5);
+    String value = StringUtils.makeRandomString(5);
+    Properties p = new Properties();
+    p.setProperty(name, value);
+    
+    auroraConnection.setClientInfo(p);
+    
+    verify(mockConnection1).setClientInfo(p);
+    verify(mockConnection2).setClientInfo(p);
   }
   
   @Test
