@@ -16,8 +16,9 @@ import java.util.logging.Logger;
 
 import org.threadly.concurrent.CentralThreadlyPool;
 import org.threadly.concurrent.ReschedulingOperation;
-import org.threadly.concurrent.SubmitterScheduler;
+import org.threadly.concurrent.SchedulerService;
 import org.threadly.db.aurora.DelegateAuroraDriver.IllegalDriverStateException;
+import org.threadly.util.ArgumentVerifier;
 
 /**
  * Class which monitors a "cluster" of aurora servers.  It is expected that for each given cluster
@@ -32,15 +33,38 @@ import org.threadly.db.aurora.DelegateAuroraDriver.IllegalDriverStateException;
 public class AuroraClusterMonitor {
   protected static final Logger LOG = Logger.getLogger(AuroraClusterMonitor.class.getSimpleName());
 
-  protected static final int CHECK_FREQUENCY_MILLIS = 500;  // TODO - make configurable
   protected static final int MAXIMUM_THREAD_POOL_SIZE = 64;
-  protected static final SubmitterScheduler MONITOR_SCHEDULER;
+  protected static final SchedulerService MONITOR_SCHEDULER;
   protected static final ConcurrentMap<AuroraServersKey, AuroraClusterMonitor> MONITORS;
+  private static volatile long CHECK_FREQUENCY_MILLIS = 500;
 
   static {
     MONITOR_SCHEDULER = CentralThreadlyPool.threadPool(MAXIMUM_THREAD_POOL_SIZE, "auroraMonitor");
 
     MONITORS = new ConcurrentHashMap<>();
+  }
+  
+  /**
+   * Sets or updates the delay between individual server status checks.  Reducing this from the 
+   * default of 500ms can make failover events be discovered faster.  Since this is done on a 
+   * per-client basis, it is recommended not to make this too small or it can significantly impact 
+   * server load when there is a lot of clients.  It is worth being aware that server checks will 
+   * be expedited if the driver discovers potential server stability issues anyways.
+   * 
+   * @param millis The milliseconds between server checks
+   */
+  public static void setServerCheckDelayMillis(long millis) {
+    ArgumentVerifier.assertGreaterThanZero(millis, "millis");
+    
+    synchronized (AuroraClusterMonitor.class) {
+      if (CHECK_FREQUENCY_MILLIS != millis) {
+        CHECK_FREQUENCY_MILLIS = millis;
+        
+        for (AuroraClusterMonitor acm : MONITORS.values()) {
+          acm.clusterStateChecker.updateServerCheckDelayMillis(millis);
+        }
+      }
+    }
   }
 
   /**
@@ -71,7 +95,7 @@ public class AuroraClusterMonitor {
   protected final ClusterChecker clusterStateChecker;
   private final AtomicLong replicaIndex;  // used to distribute replica reads
 
-  protected AuroraClusterMonitor(SubmitterScheduler scheduler, long checkIntervalMillis,
+  protected AuroraClusterMonitor(SchedulerService scheduler, long checkIntervalMillis,
                                  DelegateAuroraDriver driver, AuroraServer[] clusterServers) {
     clusterStateChecker = new ClusterChecker(scheduler, checkIntervalMillis, driver, clusterServers);
     replicaIndex = new AtomicLong();
@@ -216,14 +240,14 @@ public class AuroraClusterMonitor {
    * (and thus will witness the final cluster state).
    */
   protected static class ClusterChecker extends ReschedulingOperation {
-    protected final SubmitterScheduler scheduler;
+    protected final SchedulerService scheduler;
     protected final Map<AuroraServer, ServerMonitor> allServers;
     protected final List<AuroraServer> secondaryServers;
     protected final AtomicReference<AuroraServer> masterServer;
     protected final CopyOnWriteArrayList<AuroraServer> serversWaitingExpeditiedCheck;
     private volatile boolean initialized = false; // starts false to avoid updates while constructor is running
 
-    protected ClusterChecker(SubmitterScheduler scheduler, long checkIntervalMillis,
+    protected ClusterChecker(SchedulerService scheduler, long checkIntervalMillis,
                              DelegateAuroraDriver driver, AuroraServer[] clusterServers) {
       super(scheduler, 0);
 
@@ -250,12 +274,7 @@ public class AuroraClusterMonitor {
           scheduler.execute(monitor);
         }
 
-        scheduler.scheduleAtFixedRate(monitor,
-                                      // hopefully well distributed hash code will distribute
-                                      // these tasks so that they are not all checked at once
-                                      // we convert to a long to avoid a possible overflow at Integer.MIN_VALUE
-                                      Math.abs((long)System.identityHashCode(monitor)) % checkIntervalMillis,
-                                      checkIntervalMillis);
+        scheduleMonitor(monitor, checkIntervalMillis);
       }
       if (masterServer.get() == null) {
         LOG.warning("No master server found!  Will use read only servers till one becomes master");
@@ -266,7 +285,7 @@ public class AuroraClusterMonitor {
     }
 
     // used in testing
-    protected ClusterChecker(SubmitterScheduler scheduler, long checkIntervalMillis,
+    protected ClusterChecker(SchedulerService scheduler, 
                              Map<AuroraServer, ServerMonitor> clusterServers) {
       super(scheduler, 0);
 
@@ -277,6 +296,34 @@ public class AuroraClusterMonitor {
       masterServer = new AtomicReference<>();
 
       initialized = true;
+    }
+
+    
+    /**
+     * Update how often monitors check the individual servers status.
+     * <p>
+     * This can NOT be called concurrently, 
+     * {@link AuroraClusterMonitor#setClusterCheckFrequencyMillis(long)} currently guards this.
+     * 
+     * @param millis The delay between runs for monitoring server status  
+     */
+    protected void updateServerCheckDelayMillis(long millis) {
+      for (ServerMonitor sm : allServers.values()) {
+        if (scheduler.remove(sm)) {
+          scheduleMonitor(sm, millis);
+        } else {
+          throw new IllegalStateException("Could not unschedule monitor: " + sm);
+        }
+      }
+    }
+    
+    protected void scheduleMonitor(ServerMonitor monitor, long checkIntervalMillis) {
+      scheduler.scheduleAtFixedRate(monitor,
+                                    // hopefully well distributed hash code will distribute
+                                    // these tasks so that they are not all checked at once
+                                    // we convert to a long to avoid a possible overflow at Integer.MIN_VALUE
+                                    Math.abs((long)System.identityHashCode(monitor)) % checkIntervalMillis,
+                                    checkIntervalMillis);
     }
 
     protected void expediteServerCheck(ServerMonitor serverMonitor) {
@@ -372,6 +419,11 @@ public class AuroraClusterMonitor {
       }
       lastError = null;
       masterServer = false;
+    }
+    
+    @Override
+    public String toString() {
+      return (masterServer ? "m:" : "r:") + server;
     }
     
     protected void reconnect() throws SQLException {

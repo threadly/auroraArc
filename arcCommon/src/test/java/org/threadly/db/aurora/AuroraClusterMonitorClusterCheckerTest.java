@@ -16,6 +16,7 @@ import org.threadly.concurrent.SubmitterScheduler;
 import org.threadly.db.aurora.AuroraClusterMonitor.ClusterChecker;
 import org.threadly.db.aurora.AuroraClusterMonitor.ServerMonitor;
 import org.threadly.test.concurrent.TestableScheduler;
+import org.threadly.util.ExceptionHandler;
 
 public class AuroraClusterMonitorClusterCheckerTest {
   private static final TestableScheduler SERVER_MONITOR_SCHEDULER;
@@ -42,7 +43,7 @@ public class AuroraClusterMonitorClusterCheckerTest {
   @Before
   public void setup() {
     testScheduler = new TestableScheduler();
-    clusterChecker = new ClusterChecker(testScheduler, 1000, CLUSTER_SERVERS);
+    clusterChecker = new ClusterChecker(testScheduler, CLUSTER_SERVERS);
     SERVER_MONITOR_SCHEDULER.clearTasks();
     for (ServerMonitor sm : CLUSTER_SERVERS.values()) {
       ((TestServerMonitor)sm).resetState();
@@ -53,6 +54,18 @@ public class AuroraClusterMonitorClusterCheckerTest {
   public void cleanup() {
     testScheduler = null;
     clusterChecker = null;
+  }
+  
+  @Test
+  public void updateServerCheckDelayMillisTest() {
+    for (ServerMonitor sm : CLUSTER_SERVERS.values()) {
+      clusterChecker.scheduleMonitor(sm, 500);
+    }
+    
+    clusterChecker.updateServerCheckDelayMillis(100);
+    
+    assertEquals(CLUSTER_SERVERS.size(), 
+                 testScheduler.advance(100, ExceptionHandler.IGNORE_HANDLER));
   }
   
   @Test
