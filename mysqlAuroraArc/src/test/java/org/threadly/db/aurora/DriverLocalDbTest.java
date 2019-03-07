@@ -1,12 +1,14 @@
 package org.threadly.db.aurora;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.mock;
 
 import java.sql.ResultSet;
 import java.sql.SQLClientInfoException;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Properties;
 
 import org.junit.After;
 import org.junit.Before;
@@ -31,6 +33,8 @@ import org.skife.jdbi.v2.tweak.ResultSetMapper;
 import org.threadly.concurrent.UnfairExecutor;
 import org.threadly.db.LoggingDriver;
 import org.threadly.db.aurora.Driver;
+import org.threadly.db.aurora.AuroraClusterMonitor.AuroraServersKey;
+import org.threadly.db.aurora.AuroraClusterMonitor.ClusterChecker;
 import org.threadly.util.Clock;
 import org.threadly.util.ExceptionUtils;
 import org.threadly.util.Pair;
@@ -251,6 +255,23 @@ public class DriverLocalDbTest {
       txDao.insertRecordAndReturnId(StringUtils.makeRandomString(5));
       throw new SuppressedStackRuntimeException();
     });
+  }
+  
+  @Test
+  public void connectErrorDelayedTest() throws SQLException {
+    AuroraServer[] servers = new AuroraServer[] { new AuroraServer("127.0.0.1:3306", new Properties()), 
+                                                  new AuroraServer("127.0.0.2:6603", new Properties()) };
+    // put in monitor so we don't fail trying to establish cluster monitor
+    AuroraClusterMonitor.MONITORS.put(new AuroraServersKey(servers), 
+                                      new AuroraClusterMonitor(mock(ClusterChecker.class)));
+    
+    DBI dbi = new DBI("jdbc:mysql:aurora://127.0.0.1:3306,127.0.0.2:6603/auroraArc?" + 
+                        "useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false",
+                      "auroraArc", "");
+    
+    try (Handle h = dbi.open()) {
+      assertTrue(h.getConnection().isValid(0));
+    }
   }
 
   @Test

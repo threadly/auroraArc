@@ -97,7 +97,12 @@ public class AuroraClusterMonitor {
 
   protected AuroraClusterMonitor(SchedulerService scheduler, long checkIntervalMillis,
                                  DelegateAuroraDriver driver, AuroraServer[] clusterServers) {
-    clusterStateChecker = new ClusterChecker(scheduler, checkIntervalMillis, driver, clusterServers);
+    this(new ClusterChecker(scheduler, checkIntervalMillis, driver, clusterServers));
+  }
+
+  // used in testing
+  protected AuroraClusterMonitor(ClusterChecker clusterChecker) {
+    this.clusterStateChecker = clusterChecker;
     replicaIndex = new AtomicLong();
   }
   
@@ -183,7 +188,7 @@ public class AuroraClusterMonitor {
    * 
    * @since 0.8
    */
-  private static class AuroraServersKey {
+  protected static class AuroraServersKey {
     private final AuroraServer[] clusterServers;
     private final int hashCode;
     

@@ -12,8 +12,11 @@ import java.util.Properties;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.threadly.db.AbstractDelegatingConnection;
+import org.threadly.db.ErrorSqlConnection;
 import org.threadly.db.aurora.DelegatingAuroraConnection.ConnectionStateManager.ConnectionHolder;
 import org.threadly.util.Clock;
 import org.threadly.util.Pair;
@@ -112,6 +115,8 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
   protected static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT = // may be set by providing null or empty
       CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART;
   
+  protected static final Logger LOG = Logger.getLogger(AuroraClusterMonitor.class.getSimpleName());
+  
   /**
    * Check if a given URL is accepted by this connection.
    * 
@@ -194,21 +199,35 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
     Pair<AuroraServer, SQLException> connectException = null;
     for (int i = 0; i < serverCount; i++) {
       this.servers[i] = new AuroraServer(servers[i], info);
-      if (connectException == null) {
-        try {
-          connections[i] = connectionStateManager.wrapConnection(dDriver.connect(servers[i] + urlArgs, info));
-          if (firstConnectionHolder == null) {
-            firstConnectionHolder = connections[i];
-          }
-        } catch (SQLException e) {
+      try {
+        connections[i] = connectionStateManager.wrapConnection(dDriver.connect(servers[i] + urlArgs, info));
+        if (firstConnectionHolder == null) {
+          firstConnectionHolder = connections[i];
+        }
+      } catch (SQLException e) {
+        LOG.log(Level.WARNING, "Delaying connect error for server: " + this.servers[i], e);
+        if (connectException == null) {
           connectException = new Pair<>(this.servers[i], e);
         }
+        connections[i] = 
+            new ConnectionStateManager.UnverifiedConnectionHolder(
+                new ErrorSqlConnection(this::closeSilently, e));
+      } catch (RuntimeException e) {
+        LOG.log(Level.WARNING, "Delaying connect error for server: " + this.servers[i], e);
+        if (connectException == null) {
+          connectException = new Pair<>(this.servers[i], new SQLException(e));
+        }
+        connections[i] = 
+            new ConnectionStateManager.UnverifiedConnectionHolder(
+                new ErrorSqlConnection(this::closeSilently, e));
       }
     }
     clusterMonitor = AuroraClusterMonitor.getMonitor(dDriver, this.servers);
     if (connectException != null) {
       clusterMonitor.expediteServerCheck(connectException.getLeft());
-      throw connectException.getRight();
+      if (firstConnectionHolder == null) {  // all connections are in error, throw now
+        throw connectException.getRight();
+      }
     }
     referenceConnection = firstConnectionHolder.uncheckedState();
     closed = new AtomicBoolean();
@@ -235,14 +254,35 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
     // TODO - I think we can produce a better string than this
     return DelegatingAuroraConnection.class.getSimpleName() + ":" + Arrays.toString(servers);
   }
+  
+  protected void closeSilently() {
+    try {
+      close();
+    } catch (SQLException e) {
+      // ignored
+    }
+  }
 
   @Override
   public void close() throws SQLException {
     if (closed.compareAndSet(false, true)) {
+      SQLException sqlError = null;
+      RuntimeException runtimeError = null;
       synchronized (connections) {
         for (ConnectionHolder ch : connections) {
-          ch.uncheckedState().close();
+          try {
+            ch.uncheckedState().close();
+          } catch (SQLException e) {
+            sqlError = e;
+          } catch (RuntimeException e) {
+            runtimeError = e;
+          }
         }
+      }
+      if (sqlError != null) {
+        throw sqlError;
+      } else if (runtimeError != null) {
+        throw runtimeError;
       }
     }
   }
@@ -517,23 +557,26 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
 
   @Override
   public boolean isValid(int timeout) throws SQLException {
-    long startTime = timeout == 0 ? 0 : Clock.accurateForwardProgressingMillis();
-    for (ConnectionHolder ch : connections) {
-      int remainingTimeout;
-      if (timeout == 0) {
-        remainingTimeout = 0;
-      } else {
-        // seconds are gross
-        remainingTimeout = timeout - (int)Math.floor((Clock.lastKnownForwardProgressingMillis() - startTime) / 1000.);
+    if (timeout > 0) {
+      long startTime = Clock.accurateForwardProgressingMillis();
+      for (ConnectionHolder ch : connections) {
+        int remainingTimeout = // seconds are gross
+            timeout - (int)Math.floor((Clock.lastKnownForwardProgressingMillis() - startTime) / 1000.);
         if (remainingTimeout <= 0) {
+          return false;
+        } else if (! ch.uncheckedState().isValid(remainingTimeout)) {
           return false;
         }
       }
-      if (! ch.uncheckedState().isValid(remainingTimeout)) {
-        return false;
+      return true;
+    } else {
+      for (ConnectionHolder ch : connections) {
+        if (! ch.uncheckedState().isValid(timeout)) {
+          return false;
+        }
       }
+      return true;
     }
-    return true;
   }
 
   @Override
@@ -658,7 +701,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
      * @return Holder specific to the connection provided
      * @throws SQLException Thrown if delegate connection throws while initializing the state
      */
-    public ConnectionHolder wrapConnection(Connection connection) throws SQLException {
+    protected ConnectionHolder wrapConnection(Connection connection) throws SQLException {
       if (transactionIsolationLevel == Integer.MIN_VALUE) {
         // startup state from first connection we see
         readOnly = connection.isReadOnly();
@@ -688,6 +731,20 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
       }
 
       public abstract Connection verifiedState() throws SQLException;
+    }
+
+    /**
+     * Implementation of {@link ConnectionHolder} that will never do any state verifications.
+     */
+    public static class UnverifiedConnectionHolder extends ConnectionHolder {
+      public UnverifiedConnectionHolder(Connection connection) {
+        super(connection);
+      }
+
+      @Override
+      public Connection verifiedState() {
+        return connection;
+      }
     }
   }
   
