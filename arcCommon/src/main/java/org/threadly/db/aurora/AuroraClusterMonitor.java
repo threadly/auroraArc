@@ -36,7 +36,7 @@ public class AuroraClusterMonitor {
   protected static final int MAXIMUM_THREAD_POOL_SIZE = 64;
   protected static final SchedulerService MONITOR_SCHEDULER;
   protected static final ConcurrentMap<AuroraServersKey, AuroraClusterMonitor> MONITORS;
-  private static volatile long CHECK_FREQUENCY_MILLIS = 500;
+  private static volatile long checkFrequencyMillis = 500;
 
   static {
     MONITOR_SCHEDULER = CentralThreadlyPool.threadPool(MAXIMUM_THREAD_POOL_SIZE, "auroraMonitor");
@@ -57,8 +57,8 @@ public class AuroraClusterMonitor {
     ArgumentVerifier.assertGreaterThanZero(millis, "millis");
     
     synchronized (AuroraClusterMonitor.class) {
-      if (CHECK_FREQUENCY_MILLIS != millis) {
-        CHECK_FREQUENCY_MILLIS = millis;
+      if (checkFrequencyMillis != millis) {
+        checkFrequencyMillis = millis;
         
         for (AuroraClusterMonitor acm : MONITORS.values()) {
           acm.clusterStateChecker.updateServerCheckDelayMillis(millis);
@@ -88,7 +88,7 @@ public class AuroraClusterMonitor {
     
     return MONITORS.computeIfAbsent(mapKey,
                                     (s) -> new AuroraClusterMonitor(MONITOR_SCHEDULER,
-                                                                    CHECK_FREQUENCY_MILLIS, 
+                                                                    checkFrequencyMillis, 
                                                                     driver, mapKey.clusterServers));
   }
 

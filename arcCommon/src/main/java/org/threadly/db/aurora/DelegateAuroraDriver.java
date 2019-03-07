@@ -1,5 +1,6 @@
 package org.threadly.db.aurora;
 
+import java.lang.reflect.InvocationTargetException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Properties;
@@ -14,15 +15,18 @@ import org.threadly.util.SuppressedStackRuntimeException;
 public abstract class DelegateAuroraDriver {
   @SuppressWarnings({"unchecked", "rawtypes"})
   protected static final Pair<String, DelegateAuroraDriver>[] DEFAULT_IMPLEMENTATIONS = 
-    new Pair[] {attemptInitialization("org.threadly.db.aurora.mysql.MySqlDelegateDriver"), 
-                attemptInitialization("org.threadly.db.aurora.psql.PsqlDelegateDriver")};
+    new Pair[] { attemptInitialization("org.threadly.db.aurora.mysql.MySqlDelegateDriver"), 
+                 attemptInitialization("org.threadly.db.aurora.psql.PsqlDelegateDriver") };
   
   private static Pair<String, DelegateAuroraDriver> attemptInitialization(String delegateClass) {
     try {
-      return new Pair<>(delegateClass, (DelegateAuroraDriver)Class.forName(delegateClass).newInstance());
+      return new Pair<>(delegateClass, 
+                        (DelegateAuroraDriver)Class.forName(delegateClass)
+                                                   .getDeclaredConstructor().newInstance());
     } catch (ClassNotFoundException e) {
       return new Pair<>(delegateClass, null);
-    } catch (IllegalAccessException | InstantiationException e) {
+    } catch (InvocationTargetException | NoSuchMethodException | 
+             IllegalAccessException | InstantiationException e) {
       throw new RuntimeException(e);
     }
   }

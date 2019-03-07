@@ -16,11 +16,11 @@
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/logback-core-1.2.3.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/objenesis-2.6.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/slf4j-api-1.7.25.jar"/>
-	<classpathentry kind="lib" path="arcCommon/build/dependencies/HikariCP-3.3.0.jar"/>
 	<classpathentry kind="lib" path="psqlAuroraArc/build/dependencies/postgresql-42.2.5.jar"/>
-	<classpathentry kind="lib" path="mysqlAuroraArc/build/dependencies/mysql-connector-java-8.0.13.jar"/>
 	<classpathentry kind="lib" path="build/dependencies/byte-buddy-1.7.9.jar"/>
 	<classpathentry kind="lib" path="build/dependencies/byte-buddy-agent-1.7.9.jar"/>
 	<classpathentry kind="lib" path="build/dependencies/mockito-core-2.13.0.jar"/>
+	<classpathentry kind="lib" path="mysqlAuroraArc/build/dependencies/mysql-connector-java-8.0.15.jar"/>
+	<classpathentry kind="lib" path="arcCommon/build/dependencies/HikariCP-3.3.1.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
