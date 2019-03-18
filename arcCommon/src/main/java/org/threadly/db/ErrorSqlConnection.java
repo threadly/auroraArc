@@ -38,6 +38,12 @@ public class ErrorSqlConnection implements Connection {
   private volatile boolean closed = false;
   private volatile boolean errorThrown = false;
   
+  /**
+   * Construct a new {@link ErrorSqlConnection}.
+   * 
+   * @param errorThrownListener Listener to be invoked when error is realized (ie thrown)
+   * @param error Error to throw once Connection is attempted to be used
+   */
   public ErrorSqlConnection(Runnable errorThrownListener, SQLException error) {
     ArgumentVerifier.assertNotNull(error, "error");
     
@@ -49,7 +55,13 @@ public class ErrorSqlConnection implements Connection {
     this.sqlError = error;
     this.runtimeError = null;
   }
-  
+
+  /**
+   * Construct a new {@link ErrorSqlConnection}.
+   * 
+   * @param errorThrownListener Listener to be invoked when error is realized (ie thrown)
+   * @param error Error to throw once Connection is attempted to be used
+   */
   public ErrorSqlConnection(Runnable errorThrownListener, RuntimeException error) {
     ArgumentVerifier.assertNotNull(error, "error");
     
