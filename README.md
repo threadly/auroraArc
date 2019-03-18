@@ -11,7 +11,7 @@ For MySQL:
 <dependency>
 	<groupId>org.threadly</groupId>
 	<artifactId>auroraArc-mysql</artifactId>
-	<version>0.8</version>
+	<version>0.9</version>
 </dependency>
 ```
 
