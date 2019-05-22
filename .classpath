@@ -20,7 +20,7 @@
 	<classpathentry kind="lib" path="build/dependencies/byte-buddy-1.7.9.jar"/>
 	<classpathentry kind="lib" path="build/dependencies/byte-buddy-agent-1.7.9.jar"/>
 	<classpathentry kind="lib" path="build/dependencies/mockito-core-2.13.0.jar"/>
-	<classpathentry kind="lib" path="mysqlAuroraArc/build/dependencies/mysql-connector-java-8.0.15.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/HikariCP-3.3.1.jar"/>
+	<classpathentry kind="lib" path="mysqlAuroraArc/build/dependencies/mysql-connector-java-8.0.16.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

@@ -16,7 +16,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.threadly.db.AbstractDelegatingConnection;
-import org.threadly.db.ErrorSqlConnection;
+import org.threadly.db.ErrorValidSqlConnection;
 import org.threadly.db.aurora.DelegatingAuroraConnection.ConnectionStateManager.ConnectionHolder;
 import org.threadly.util.Clock;
 import org.threadly.util.Pair;
@@ -211,7 +211,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
         }
         connections[i] = 
             new ConnectionStateManager.UnverifiedConnectionHolder(
-                new ErrorSqlConnection(this::closeSilently, e));
+                new ErrorValidSqlConnection(this::closeSilently, e));
       } catch (RuntimeException e) {
         LOG.log(Level.WARNING, "Delaying connect error for server: " + this.servers[i], e);
         if (connectException == null) {
@@ -219,7 +219,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
         }
         connections[i] = 
             new ConnectionStateManager.UnverifiedConnectionHolder(
-                new ErrorSqlConnection(this::closeSilently, e));
+                new ErrorValidSqlConnection(this::closeSilently, e));
       }
     }
     clusterMonitor = AuroraClusterMonitor.getMonitor(dDriver, this.servers);

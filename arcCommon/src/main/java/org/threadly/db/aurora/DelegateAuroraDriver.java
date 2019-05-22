@@ -85,6 +85,18 @@ public abstract class DelegateAuroraDriver {
   public String getArcPrefix() {
     return arcPrefix;
   }
+  
+  /**
+   * Get the parameters specific for the connection used for checking the master / slave / health 
+   * check.  By default this will return a timezone of UTC and SSL disabled.  Each parameter should 
+   * be prefixed / delineated with {@code &}, this includes the first parameter.  If no parameters are 
+   * provided this should return the empty string.
+   * 
+   * @return A {@code non-null} list of parameters to affix to the status check URL
+   */
+  public String getStatusConnectURLParams() {
+    return "&serverTimezone=UTC&useSSL=false";
+  }
 
   /**
    * Get the delegated driver instance.

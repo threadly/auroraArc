@@ -29,9 +29,9 @@ import org.threadly.util.ArgumentVerifier;
  * The connection will appear valid (from {@link #isValid(int)} and non-closed UNTIL the exception 
  * is thrown.  After that point the connection will appear as if it was closed.
  * 
- * @since 0.9
+ * @since 0.10
  */
-public class ErrorSqlConnection implements Connection {
+abstract class AbstractErrorSqlConnection implements Connection {
   private final Runnable errorThrownListener;
   private final SQLException sqlError;
   private final RuntimeException runtimeError;
@@ -39,12 +39,12 @@ public class ErrorSqlConnection implements Connection {
   private volatile boolean errorThrown = false;
   
   /**
-   * Construct a new {@link ErrorSqlConnection}.
+   * Construct a new {@link AbstractErrorSqlConnection}.
    * 
    * @param errorThrownListener Listener to be invoked when error is realized (ie thrown)
    * @param error Error to throw once Connection is attempted to be used
    */
-  public ErrorSqlConnection(Runnable errorThrownListener, SQLException error) {
+  public AbstractErrorSqlConnection(Runnable errorThrownListener, SQLException error) {
     ArgumentVerifier.assertNotNull(error, "error");
     
     if (errorThrownListener == null) {
@@ -57,12 +57,12 @@ public class ErrorSqlConnection implements Connection {
   }
 
   /**
-   * Construct a new {@link ErrorSqlConnection}.
+   * Construct a new {@link AbstractErrorSqlConnection}.
    * 
    * @param errorThrownListener Listener to be invoked when error is realized (ie thrown)
    * @param error Error to throw once Connection is attempted to be used
    */
-  public ErrorSqlConnection(Runnable errorThrownListener, RuntimeException error) {
+  public AbstractErrorSqlConnection(Runnable errorThrownListener, RuntimeException error) {
     ArgumentVerifier.assertNotNull(error, "error");
     
     if (errorThrownListener == null) {
@@ -93,11 +93,6 @@ public class ErrorSqlConnection implements Connection {
   @Override
   public boolean isClosed() {
     return errorThrown || closed;
-  }
-
-  @Override
-  public boolean isValid(int timeout) {
-    return ! isClosed();
   }
 
   @Override

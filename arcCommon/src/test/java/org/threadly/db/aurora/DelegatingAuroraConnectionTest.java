@@ -331,6 +331,7 @@ public class DelegatingAuroraConnectionTest {
   
   @Test
   public void closeTest() throws SQLException {
+    assertFalse(auroraConnection.isClosed());
     auroraConnection.close();
 
     assertTrue(auroraConnection.isClosed());

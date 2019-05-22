@@ -1,8 +1,6 @@
 package org.threadly.db;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.sql.SQLException;
 import java.util.Collections;
@@ -14,17 +12,19 @@ import org.junit.Test;
 import org.threadly.test.concurrent.TestRunnable;
 import org.threadly.util.ExceptionUtils;
 
-public class ErrorSqlConnectionTest {
-  private static final SQLException ERROR = new SQLException();
+public abstract class AbstractErrorSqlConnectionTest {
+  protected static final SQLException ERROR = new SQLException();
 
-  private TestRunnable testListener;
-  private ErrorSqlConnection connection;
+  protected TestRunnable testListener;
+  protected AbstractErrorSqlConnection connection;
   
   @Before
   public void setup() {
     testListener = new TestRunnable();
-    connection = new ErrorSqlConnection(testListener, ERROR);
+    connection = makeConnection(testListener, ERROR);
   }
+  
+  protected abstract AbstractErrorSqlConnection makeConnection(Runnable testListener, SQLException error);
 
   @After
   public void cleanup() {
@@ -40,19 +40,8 @@ public class ErrorSqlConnectionTest {
     
     assertTrue(connection.isClosed());
   }
-
-  @Test
-  public void isValidTest() {
-    assertTrue(connection.isValid(0));
-    
-    
-    verifyAction(connection::error);
-    
-    assertFalse(connection.isValid(0));
-    assertTrue(connection.isClosed());
-  }
   
-  private void verifyAction(Callable<?> operation) {
+  protected void verifyAction(Callable<?> operation) {
     try {
       operation.call();
       fail("Exception should have thrown");

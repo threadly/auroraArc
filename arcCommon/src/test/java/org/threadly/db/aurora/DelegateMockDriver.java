@@ -82,6 +82,7 @@ public class DelegateMockDriver {
         
         try {
           // mock out the behavior for secondary check on mysql
+          when(mockConnection.isValid(anyInt())).thenReturn(true);
           PreparedStatement mockStatement = mock(PreparedStatement.class);
           ResultSet mockResultSet = mock(ResultSet.class);
           when(mockStatement.executeQuery()).thenReturn(mockResultSet);

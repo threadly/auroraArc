@@ -11,14 +11,18 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.threadly.concurrent.CentralThreadlyPool;
 import org.threadly.concurrent.ReschedulingOperation;
 import org.threadly.concurrent.SchedulerService;
+import org.threadly.concurrent.SubmitterScheduler;
+import org.threadly.db.ErrorInvalidSqlConnection;
 import org.threadly.db.aurora.DelegateAuroraDriver.IllegalDriverStateException;
 import org.threadly.util.ArgumentVerifier;
+import org.threadly.util.ExceptionHandler;
 
 /**
  * Class which monitors a "cluster" of aurora servers.  It is expected that for each given cluster
@@ -32,16 +36,19 @@ import org.threadly.util.ArgumentVerifier;
  */
 public class AuroraClusterMonitor {
   protected static final Logger LOG = Logger.getLogger(AuroraClusterMonitor.class.getSimpleName());
+  protected static final int CONNECTION_VALID_CHECK_TIMEOUT = 10_000;
 
   protected static final int MAXIMUM_THREAD_POOL_SIZE = 64;
   protected static final SchedulerService MONITOR_SCHEDULER;
   protected static final ConcurrentMap<AuroraServersKey, AuroraClusterMonitor> MONITORS;
   private static volatile long checkFrequencyMillis = 500;
+  private static volatile BiConsumer<AuroraServer, Throwable> errorExceptionHandler;
 
   static {
     MONITOR_SCHEDULER = CentralThreadlyPool.threadPool(MAXIMUM_THREAD_POOL_SIZE, "auroraMonitor");
 
     MONITORS = new ConcurrentHashMap<>();
+    setExceptionHandler(null);
   }
   
   /**
@@ -65,6 +72,21 @@ public class AuroraClusterMonitor {
         }
       }
     }
+  }
+  
+  /**
+   * Set an {@link ExceptionHandler} to be invoked on EVERY error when checking the cluster state.
+   * By default state changes will be logged, but due to potential high volumes logs will only 
+   * occur on server state changes.  This sets an {@link ExceptionHandler} which will be invoked on 
+   * any error, even if the server is already in an unhealthy condition.
+   * 
+   * @param handler Handler to be invoked or {@code null} if exceptions should be dropped.
+   */
+  public static void setExceptionHandler(BiConsumer<AuroraServer, Throwable> handler) {
+    if (handler == null) {
+      handler = (server, error) -> { /* ignored */ };
+    }
+    errorExceptionHandler = handler;
   }
 
   /**
@@ -263,11 +285,11 @@ public class AuroraClusterMonitor {
       masterServer = new AtomicReference<>();
 
       for (AuroraServer server : clusterServers) {
-        ServerMonitor monitor = new ServerMonitor(driver, server, this);
+        ServerMonitor monitor = new ServerMonitor(scheduler, driver, server, this);
         allServers.put(server, monitor);
 
         if (masterServer.get() == null) {  // check in thread till we find the master
-          monitor.run();
+          monitor.run(true);
           if (monitor.isHealthy()) {
             if (monitor.isMasterServer()) {
               masterServer.set(server);
@@ -335,7 +357,7 @@ public class AuroraClusterMonitor {
       if (serversWaitingExpeditiedCheck.addIfAbsent(serverMonitor.server)) {
         scheduler.execute(() -> {
           try {
-            serverMonitor.run();
+            serverMonitor.run(true);
           } finally {
             serversWaitingExpeditiedCheck.remove(serverMonitor.server);
           }
@@ -402,26 +424,24 @@ public class AuroraClusterMonitor {
    * queried.
    */
   protected static class ServerMonitor implements Runnable {
+    protected final SubmitterScheduler scheduler;
     protected final DelegateAuroraDriver driver;
     protected final AuroraServer server;
     protected final ReschedulingOperation clusterStateChecker;
     protected final AtomicBoolean running;
-    protected Connection serverConnection;
-    protected volatile Throwable lastError;
+    protected Connection serverConnection;  // guarded by running AtomicBoolean
+    protected Throwable lastError;  // guarded by running AtomicBoolean
+    protected volatile Throwable stateError;
     protected volatile boolean masterServer;
 
-    protected ServerMonitor(DelegateAuroraDriver driver, AuroraServer server, 
-                            ReschedulingOperation clusterStateChecker) {
+    protected ServerMonitor(SubmitterScheduler scheduler, DelegateAuroraDriver driver, 
+                            AuroraServer server, ReschedulingOperation clusterStateChecker) {
+      this.scheduler = scheduler;
       this.driver = driver;
       this.server = server;
       this.clusterStateChecker = clusterStateChecker;
       this.running = new AtomicBoolean(false);
-      try {
-        reconnect();
-      } catch (SQLException e) {
-        throw new RuntimeException("Could not connect to monitor cluster member: " +
-                                     server + ", error is fatal", e);
-      }
+      reconnect();
       lastError = null;
       masterServer = false;
     }
@@ -431,12 +451,16 @@ public class AuroraClusterMonitor {
       return (masterServer ? "m:" : "r:") + server;
     }
     
-    protected void reconnect() throws SQLException {
-      Connection newConnection = 
-          driver.connect(server.hostAndPortString() +
-                           "/?connectTimeout=10000&socketTimeout=10000" + 
-                           "&serverTimezone=UTC&useSSL=false",
-                         server.getProperties());
+    protected void reconnect() {
+      Connection newConnection;
+      try {
+        newConnection = driver.connect(server.hostAndPortString() +
+                                         "/?connectTimeout=10000&socketTimeout=10000" + 
+                                         driver.getStatusConnectURLParams(),
+                                       server.getProperties());
+      } catch (SQLException e) {
+        newConnection = new ErrorInvalidSqlConnection(null, e);
+      }
       if (serverConnection != null) { // only attempt to replace once we have a new connection without exception
         try {
           serverConnection.close();
@@ -448,7 +472,7 @@ public class AuroraClusterMonitor {
     }
 
     public boolean isHealthy() {
-      return lastError == null;
+      return stateError == null;
     }
 
     public boolean isMasterServer() {
@@ -457,21 +481,30 @@ public class AuroraClusterMonitor {
 
     @Override
     public void run() {
+      run(false);
+    }
+    
+    public void run(boolean expedited) {
       // if already running ignore start
       if (running.compareAndSet(false, true)) {
         try {
-          updateState();
+          updateState(expedited);
         } finally {
           running.set(false);
         }
       }
     }
 
-    protected void updateState() {
+    protected void updateState(boolean expedited) {
       // we can't set our class state directly, as we need to indicate if it has changed
       boolean currentlyMasterServer = false;
       Throwable currentError = null;
       try {
+        if (! serverConnection.isValid(CONNECTION_VALID_CHECK_TIMEOUT)) {
+          // try to avoid an error that will mark as unhealthy, if invalid because exception was 
+          // thrown during reconnect the failure will be thrown when the connection is to be used
+          reconnect();
+        }
         currentlyMasterServer = driver.isMasterServer(server, serverConnection);
       } catch (IllegalDriverStateException e) {
         // these exceptions are handled different
@@ -479,23 +512,46 @@ public class AuroraClusterMonitor {
         currentlyMasterServer = false;
       } catch (Throwable t) {
         currentError = t;
-        if (! t.equals(lastError)) {
-          LOG.log(Level.WARNING,
-                  "Setting aurora server " + server + " as unhealthy due to error checking state", t);
-        }
       } finally {
-        if (currentlyMasterServer != masterServer || ((lastError == null) != (currentError == null))) {
-          lastError = currentError;
+        boolean updateClusterState = false;
+        if (currentlyMasterServer != masterServer) {
           masterServer = currentlyMasterServer;
+          updateClusterState = true;
+        }
+        // NO else if, do the above checks in addition
+        if (currentError == null) {
+          if (lastError != null) {
+            LOG.log(Level.INFO, "Aurora server " + server + " is healthy again");
+            lastError = null;
+            if (stateError != null) {
+              stateError = null;
+              updateClusterState = true;
+            }
+          }
+        } else if (lastError == null && ! expedited) {
+          LOG.log(Level.WARNING,
+                  "Scheduling aurora server " + server + " recheck after first error", currentError);
+          lastError = currentError;
+          // don't update state status yet, wait till next failure, but schedule a recheck soon
+          // schedule as a lambda so it wont be confused with potential .remove(Runnable) invocations
+          // TODO - we may not always want to expedite this check, ie if existing connections can work
+          scheduler.schedule(() -> run(true), checkFrequencyMillis / 2);
+        } else {
+          lastError = stateError = currentError;
+          if (stateError == null) {
+            LOG.log(Level.WARNING,
+                    "Setting aurora server " + server + " as unhealthy due to error", currentError);
+            updateClusterState = true;
+          }
+        }
+        
+        if (updateClusterState) {
           clusterStateChecker.signalToRun();
         }
         // reconnect after state has been reflected, don't block till it is for sure known we are unhealthy
         if (currentError != null) {
-          try {
-            reconnect();
-          } catch (SQLException e) {
-            // ignore exceptions here, will retry on the next go around
-          }
+          reconnect();
+          errorExceptionHandler.accept(server, currentError);
         }
       }
     }

@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
 import org.junit.Before;
@@ -20,32 +21,37 @@ import org.threadly.util.ExceptionHandler;
 
 public class AuroraClusterMonitorClusterCheckerTest {
   private static final TestableScheduler SERVER_MONITOR_SCHEDULER;
-  private static final Map<AuroraServer, ServerMonitor> CLUSTER_SERVERS;
+  private static final DelegateAuroraDriver MOCK_DRIVER;
   
   static {
     SERVER_MONITOR_SCHEDULER = new TestableScheduler();
-    CLUSTER_SERVERS = new HashMap<>();
-    DelegateAuroraDriver dDriver = mock(DelegateAuroraDriver.class);
+    MOCK_DRIVER = mock(DelegateAuroraDriver.class);
     try {
-      when(dDriver.isMasterServer(any(AuroraServer.class), any())).thenThrow(new NullPointerException());
+      when(MOCK_DRIVER.isMasterServer(any(AuroraServer.class), any())).thenThrow(new NullPointerException());
     } catch (SQLException e) {
       // not possible
     }
-    AuroraServer testServer1 = new AuroraServer("host1", new Properties());
-    CLUSTER_SERVERS.put(testServer1, new TestServerMonitor(dDriver, SERVER_MONITOR_SCHEDULER, testServer1));
-    AuroraServer testServer2 = new AuroraServer("host2", new Properties());
-    CLUSTER_SERVERS.put(testServer2, new TestServerMonitor(dDriver, SERVER_MONITOR_SCHEDULER, testServer2));
   }
   
   private TestableScheduler testScheduler;
   private ClusterChecker clusterChecker;
+  private Map<AuroraServer, ServerMonitor> clusterServers;
   
   @Before
   public void setup() {
     testScheduler = new TestableScheduler();
-    clusterChecker = new ClusterChecker(testScheduler, CLUSTER_SERVERS);
     SERVER_MONITOR_SCHEDULER.clearTasks();
-    for (ServerMonitor sm : CLUSTER_SERVERS.values()) {
+    
+    clusterServers = new HashMap<>();
+    AuroraServer testServer1 = new AuroraServer("host1", new Properties());
+    clusterServers.put(testServer1, new TestServerMonitor(MOCK_DRIVER, testScheduler, 
+                                                          SERVER_MONITOR_SCHEDULER, testServer1));
+    AuroraServer testServer2 = new AuroraServer("host2", new Properties());
+    clusterServers.put(testServer2, new TestServerMonitor(MOCK_DRIVER, testScheduler, 
+                                                          SERVER_MONITOR_SCHEDULER, testServer2));
+    
+    clusterChecker = new ClusterChecker(testScheduler, clusterServers);
+    for (ServerMonitor sm : clusterServers.values()) {
       ((TestServerMonitor)sm).resetState();
     }
   }
@@ -58,14 +64,14 @@ public class AuroraClusterMonitorClusterCheckerTest {
   
   @Test
   public void updateServerCheckDelayMillisTest() {
-    for (ServerMonitor sm : CLUSTER_SERVERS.values()) {
-      clusterChecker.scheduleMonitor(sm, 500);
+    for (ServerMonitor sm : clusterServers.values()) {
+      clusterChecker.scheduleMonitor(sm, 10_000);
     }
     
-    clusterChecker.updateServerCheckDelayMillis(100);
+    clusterChecker.updateServerCheckDelayMillis(1_000);
     
-    assertEquals(CLUSTER_SERVERS.size(), 
-                 testScheduler.advance(100, ExceptionHandler.IGNORE_HANDLER));
+    assertEquals(clusterServers.size(), 
+                 testScheduler.advance(1_000, ExceptionHandler.IGNORE_HANDLER));
   }
   
   @Test
@@ -76,7 +82,43 @@ public class AuroraClusterMonitorClusterCheckerTest {
     assertEquals(1, clusterChecker.serversWaitingExpeditiedCheck.size());
     assertEquals(1, testScheduler.tick());  // the one expedited check
     
-    assertFalse(CLUSTER_SERVERS.get(testServer).isHealthy()); // NPE should have made unhealthy
+    assertFalse(clusterServers.get(testServer).isHealthy()); // NPE should have made unhealthy
+  }
+  
+  @Test
+  public void scheduledCheckHealthFailure() {
+    for (ServerMonitor sm : clusterServers.values()) {
+      testScheduler.schedule(sm, 500);  // don't use scheduleMonitor to avoid random delay
+    }
+    
+    assertEquals(2, testScheduler.advance(500));
+
+    // Nothing should be unhealthy yet, first failure on regular check ignored, prefer failure from connection use instead
+    for (ServerMonitor sm : clusterServers.values()) {
+      assertNotNull(sm.lastError);
+      assertNull(sm.stateError);
+      assertTrue(sm.isHealthy()); // NPE should have made unhealthy
+    }
+    
+    assertEquals(2, testScheduler.advance(250));  // check at half the time
+    
+    // should now be unhealthy due to second NPE failure
+    for (ServerMonitor sm : clusterServers.values()) {
+      assertFalse(sm.isHealthy());
+    }
+  }
+  
+  @Test
+  public void setExceptionHandlerTest() {
+    AtomicInteger errorCount = new AtomicInteger();
+    AuroraClusterMonitor.setExceptionHandler((server, e) -> errorCount.incrementAndGet());
+    
+    for (ServerMonitor sm : clusterServers.values()) {
+      testScheduler.schedule(sm, 500);  // don't use scheduleMonitor to avoid random delay
+    }
+    
+    assertEquals(2, testScheduler.advance(500));
+    assertEquals(2, errorCount.get());
   }
   
   @Test
@@ -91,20 +133,21 @@ public class AuroraClusterMonitorClusterCheckerTest {
   public void checkAllServersTest() {
     clusterChecker.checkAllServers();
     
-    assertEquals(CLUSTER_SERVERS.size(), clusterChecker.serversWaitingExpeditiedCheck.size());
-    assertEquals(CLUSTER_SERVERS.size(), testScheduler.tick());
+    assertEquals(clusterServers.size(), clusterChecker.serversWaitingExpeditiedCheck.size());
+    assertEquals(clusterServers.size(), testScheduler.tick());
 
-    for (ServerMonitor sm : CLUSTER_SERVERS.values()) {
+    for (ServerMonitor sm : clusterServers.values()) {
       assertFalse(sm.isHealthy()); // NPE should have made unhealthy
     }
   }
   
   private static class TestServerMonitor extends ServerMonitor {
-    protected TestServerMonitor(DelegateAuroraDriver driver, SubmitterScheduler scheduler, AuroraServer server) {
-      super(driver, server, new TestReschedulingOperation(scheduler));
+    protected TestServerMonitor(DelegateAuroraDriver driver, SubmitterScheduler monitorScheduler, 
+                                SubmitterScheduler operationScheduler, AuroraServer server) {
+      super(monitorScheduler, driver, server, new TestReschedulingOperation(operationScheduler));
     }
     
-    protected void reconnect() throws SQLException {
+    protected void reconnect() {
       // ignore
     }
     
