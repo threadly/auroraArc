@@ -37,10 +37,6 @@ subprojects {
   build.dependsOn jacocoTestReport
 
   jacocoTestReport {
-    doFirst {
-      classDirectories = fileTree(dir: 'build/classes/java/main', include: 'org/threadly/**')
-      sourceDirectories = fileTree(dir: 'src/main/java', include: 'org/threadly/**')
-    }
     reports {
       csv.enabled = false
       xml.enabled = true
