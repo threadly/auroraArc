@@ -17,7 +17,7 @@ import org.skife.jdbi.v2.Handle;
 import org.threadly.concurrent.PriorityScheduler;
 import org.threadly.concurrent.SameThreadSubmitterExecutor;
 import org.threadly.concurrent.SubmitterExecutor;
-import org.threadly.util.SuppressedStackRuntimeException;
+import org.threadly.util.StackSuppressedRuntimeException;
 
 @Ignore
 @FixMethodOrder(MethodSorters.NAME_ASCENDING) // tests prefixed `a|z[0-9]_` to set order where it matters
@@ -118,7 +118,7 @@ public class DriverLocalDbLoadTest {
     runLoad(true, 16, RUN_COUNT_REFERENCE * 100, (s) -> {
       try {
         s.transactionInsertAndLookupExceptionThrownBeforeAnyAction();
-      } catch (SuppressedStackRuntimeException e) { /* expected */ }
+      } catch (StackSuppressedRuntimeException e) { /* expected */ }
     });
   }
 
@@ -127,7 +127,7 @@ public class DriverLocalDbLoadTest {
     runLoad(true, 16, RUN_COUNT_REFERENCE * 20, (s) -> {
       try {
         s.transactionInsertAndLookupExceptionThrownAfterLookup();
-      } catch (SuppressedStackRuntimeException e) { /* expected */ }
+      } catch (StackSuppressedRuntimeException e) { /* expected */ }
     });
   }
 
@@ -136,7 +136,7 @@ public class DriverLocalDbLoadTest {
     runLoad(true, 16, RUN_COUNT_REFERENCE, (s) -> {
       try {
         s.transactionInsertAndLookupExceptionThrownAfterDone();
-      } catch (SuppressedStackRuntimeException e) { /* expected */ }
+      } catch (StackSuppressedRuntimeException e) { /* expected */ }
     });
   }
 

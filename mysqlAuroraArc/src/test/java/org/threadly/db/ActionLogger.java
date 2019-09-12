@@ -32,7 +32,7 @@ import org.threadly.concurrent.UnfairExecutor;
 import org.threadly.db.LoggingDriver;
 import org.threadly.util.Clock;
 import org.threadly.util.StringUtils;
-import org.threadly.util.SuppressedStackRuntimeException;
+import org.threadly.util.StackSuppressedRuntimeException;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -161,30 +161,30 @@ public class ActionLogger {
     });
   }
 
-  @Test (expected = SuppressedStackRuntimeException.class)
+  @Test (expected = StackSuppressedRuntimeException.class)
   public void transactionInsertAndLookupExceptionThrownBeforeAnyAction() {
     System.out.println("-- STARTING: transactionInsertAndLookupExceptionThrownBeforeAnyAction --");
     DAO.inTransaction((rt, dao) -> {
-      throw new SuppressedStackRuntimeException();
+      throw new StackSuppressedRuntimeException();
     });
   }
 
-  @Test (expected = SuppressedStackRuntimeException.class)
+  @Test (expected = StackSuppressedRuntimeException.class)
   public void transactionInsertAndLookupExceptionThrownAfterLookup() {
     System.out.println("-- STARTING: transactionInsertAndLookupExceptionThrownAfterLookup --");
     DAO.inTransaction((rt, dao) -> {
       DAO.lookupRecord(1);
-      throw new SuppressedStackRuntimeException();
+      throw new StackSuppressedRuntimeException();
     });
   }
 
-  @Test (expected = SuppressedStackRuntimeException.class)
+  @Test (expected = StackSuppressedRuntimeException.class)
   public void transactionInsertAndLookupExceptionThrownAfterDone() {
     System.out.println("-- STARTING: transactionInsertAndLookupExceptionThrownAfterDone --");
     DAO.inTransaction((rt, dao) -> {
       DAO.lookupRecord(1);
       DAO.insertRecordAndReturnId(StringUtils.makeRandomString(5));
-      throw new SuppressedStackRuntimeException();
+      throw new StackSuppressedRuntimeException();
     });
   }
 

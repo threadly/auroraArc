@@ -6,7 +6,7 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.threadly.util.Pair;
-import org.threadly.util.SuppressedStackRuntimeException;
+import org.threadly.util.StackSuppressedRuntimeException;
 
 /**
  * Driver for creating connections to a given delegate implementation.  This ultimately deals with 
@@ -141,7 +141,7 @@ public abstract class DelegateAuroraDriver {
    * Exception to indicate that the driver is in an invalid state.  Possibly because the 
    * protocol with the backend is not what the driver expected.
    */
-  protected static class IllegalDriverStateException extends SuppressedStackRuntimeException {
+  protected static class IllegalDriverStateException extends StackSuppressedRuntimeException {
     private static final long serialVersionUID = -6537317025944243741L;
 
     public IllegalDriverStateException(String msg) {

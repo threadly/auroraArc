@@ -39,7 +39,7 @@ import org.threadly.util.Clock;
 import org.threadly.util.ExceptionUtils;
 import org.threadly.util.Pair;
 import org.threadly.util.StringUtils;
-import org.threadly.util.SuppressedStackRuntimeException;
+import org.threadly.util.StackSuppressedRuntimeException;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING) // tests prefixed `a|z[0-9]_` to set order where it matters
 public class DriverLocalDbTest {
@@ -233,27 +233,27 @@ public class DriverLocalDbTest {
     assertNull(p);
   }
 
-  @Test (expected = SuppressedStackRuntimeException.class)
+  @Test (expected = StackSuppressedRuntimeException.class)
   public void transactionInsertAndLookupExceptionThrownBeforeAnyAction() {
     dao.inTransaction((txDao, txStatus) -> {
-      throw new SuppressedStackRuntimeException();
+      throw new StackSuppressedRuntimeException();
     });
   }
 
-  @Test (expected = SuppressedStackRuntimeException.class)
+  @Test (expected = StackSuppressedRuntimeException.class)
   public void transactionInsertAndLookupExceptionThrownAfterLookup() {
     dao.inTransaction((txDao, txStatus) -> {
       txDao.lookupRecord(1);
-      throw new SuppressedStackRuntimeException();
+      throw new StackSuppressedRuntimeException();
     });
   }
 
-  @Test (expected = SuppressedStackRuntimeException.class)
+  @Test (expected = StackSuppressedRuntimeException.class)
   public void transactionInsertAndLookupExceptionThrownAfterDone() {
     dao.inTransaction((txDao, txStatus) -> {
       txDao.lookupRecord(1);
       txDao.insertRecordAndReturnId(StringUtils.makeRandomString(5));
-      throw new SuppressedStackRuntimeException();
+      throw new StackSuppressedRuntimeException();
     });
   }
   
