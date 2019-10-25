@@ -106,6 +106,11 @@ abstract class AbstractErrorSqlConnection implements Connection {
   }
 
   @Override
+  public void clearWarnings() throws SQLException {
+    // ignored
+  }
+
+  @Override
   public boolean isWrapperFor(Class<?> arg0) throws SQLException {
     throw error();
   }
@@ -117,11 +122,6 @@ abstract class AbstractErrorSqlConnection implements Connection {
 
   @Override
   public void abort(Executor arg0) throws SQLException {
-    throw error();
-  }
-
-  @Override
-  public void clearWarnings() throws SQLException {
     throw error();
   }
 

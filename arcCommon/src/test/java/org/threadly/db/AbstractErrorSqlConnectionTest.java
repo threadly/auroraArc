@@ -40,6 +40,18 @@ public abstract class AbstractErrorSqlConnectionTest {
     
     assertTrue(connection.isClosed());
   }
+
+  @Test
+  public void clearWarningsTest() throws SQLException {
+    connection.clearWarnings();
+    // nothing should throw
+  }
+
+  @Test
+  public void setClientInfoTest() throws SQLException {
+    connection.setClientInfo("key", "value");
+    // nothing should throw
+  }
   
   protected void verifyAction(Callable<?> operation) {
     try {
@@ -66,11 +78,6 @@ public abstract class AbstractErrorSqlConnectionTest {
   @Test
   public void abortTest() {
     verifyAction(() -> { connection.abort(null); return null; });
-  }
-
-  @Test
-  public void clearWarningsTest() {
-    verifyAction(() -> { connection.clearWarnings(); return null; });
   }
 
   @Test

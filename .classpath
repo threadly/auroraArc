@@ -19,12 +19,12 @@
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/logback-core-1.2.3.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/objenesis-2.6.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/slf4j-api-1.7.25.jar"/>
-	<classpathentry kind="lib" path="build/dependencies/byte-buddy-1.7.9.jar"/>
-	<classpathentry kind="lib" path="build/dependencies/byte-buddy-agent-1.7.9.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/HikariCP-3.3.1.jar"/>
-	<classpathentry kind="lib" path="mysqlAuroraArc/build/dependencies/mysql-connector-java-8.0.17.jar"/>
-	<classpathentry kind="lib" path="arcCommon/build/dependencies/mockito-core-3.0.0.jar"/>
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/jdbi-2.78.jar"/>
 	<classpathentry kind="lib" path="psqlAuroraArc/build/dependencies/postgresql-42.2.7.jar"/>
+	<classpathentry kind="lib" path="arcCommon/build/dependencies/byte-buddy-1.9.10.jar"/>
+	<classpathentry kind="lib" path="arcCommon/build/dependencies/byte-buddy-agent-1.9.10.jar"/>
+	<classpathentry kind="lib" path="arcCommon/build/dependencies/mockito-core-3.1.0.jar"/>
+	<classpathentry kind="lib" path="mysqlAuroraArc/build/dependencies/mysql-connector-java-8.0.18.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

@@ -304,7 +304,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
   }
 
   @Override
-  public void setReadOnly(boolean readOnly) throws SQLException {
+  public void setReadOnly(boolean readOnly) {
     connectionStateManager.setReadOnly(readOnly);
   }
 
