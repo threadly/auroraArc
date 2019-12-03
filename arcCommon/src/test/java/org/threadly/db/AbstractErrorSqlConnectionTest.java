@@ -52,6 +52,54 @@ public abstract class AbstractErrorSqlConnectionTest {
     connection.setClientInfo("key", "value");
     // nothing should throw
   }
+
+  @Test
+  public void setAutoCommitTest() throws SQLException {
+    connection.setAutoCommit(true);
+    // nothing should throw
+  }
+
+  @Test
+  public void setCatalogTest() throws SQLException {
+    connection.setCatalog(null);
+    // nothing should throw
+  }
+
+  @Test
+  public void setHoldabilityTest() throws SQLException {
+    connection.setHoldability(-1);
+    // nothing should throw
+  }
+
+  @Test
+  public void setNetworkTimeoutTest() throws SQLException {
+    connection.setNetworkTimeout(null, -1);
+    // nothing should throw
+  }
+
+  @Test
+  public void setReadOnlyTest() throws SQLException {
+    connection.setReadOnly(true);
+    // nothing should throw
+  }
+
+  @Test
+  public void setSchemaTest() throws SQLException {
+    connection.setSchema(null);
+    // nothing should throw
+  }
+
+  @Test
+  public void setTransactionIsolationTest() throws SQLException {
+    connection.setTransactionIsolation(-1);
+    // nothing should throw
+  }
+
+  @Test
+  public void setTypeMapTest() throws SQLException {
+    connection.setTypeMap(Collections.emptyMap());
+    // nothing should throw
+  }
   
   protected void verifyAction(Callable<?> operation) {
     try {
@@ -201,47 +249,7 @@ public abstract class AbstractErrorSqlConnectionTest {
   }
 
   @Test
-  public void setAutoCommitTest() {
-    verifyAction(() -> { connection.setAutoCommit(true); return null; });
-  }
-
-  @Test
-  public void setCatalogTest() {
-    verifyAction(() -> { connection.setCatalog(null); return null; });
-  }
-
-  @Test
-  public void setHoldabilityTest() {
-    verifyAction(() -> { connection.setHoldability(-1); return null; });
-  }
-
-  @Test
-  public void setNetworkTimeoutTest() {
-    verifyAction(() -> { connection.setNetworkTimeout(null, -1); return null; });
-  }
-
-  @Test
-  public void setReadOnlyTest() {
-    verifyAction(() -> { connection.setReadOnly(true); return null; });
-  }
-
-  @Test
   public void setSavepointTest() {
     verifyAction(connection::setSavepoint);
-  }
-
-  @Test
-  public void setSchemaTest() {
-    verifyAction(() -> { connection.setSchema(null); return null; });
-  }
-
-  @Test
-  public void setTransactionIsolationTest() {
-    verifyAction(() -> { connection.setTransactionIsolation(-1); return null; });
-  }
-
-  @Test
-  public void setTypeMapTest() {
-    verifyAction(() -> { connection.setTypeMap(Collections.emptyMap()); return null; });
   }
 }

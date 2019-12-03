@@ -109,7 +109,52 @@ abstract class AbstractErrorSqlConnection implements Connection {
   public void clearWarnings() throws SQLException {
     // ignored
   }
+  
+  // set operations ignored as the state of this connection does not matter
 
+
+  @Override
+  public void setAutoCommit(boolean arg0) throws SQLException {
+    // ignored
+  }
+
+  @Override
+  public void setCatalog(String arg0) throws SQLException {
+    // ignored
+  }
+
+  @Override
+  public void setHoldability(int arg0) throws SQLException {
+    // ignored
+  }
+
+  @Override
+  public void setNetworkTimeout(Executor arg0, int arg1) throws SQLException {
+    // ignored
+  }
+
+  @Override
+  public void setReadOnly(boolean arg0) throws SQLException {
+    // ignored
+  }
+
+  @Override
+  public void setSchema(String arg0) throws SQLException {
+    // ignored
+  }
+
+  @Override
+  public void setTransactionIsolation(int arg0) throws SQLException {
+    // ignored
+  }
+
+  @Override
+  public void setTypeMap(Map<String, Class<?>> arg0) throws SQLException {
+    // ignored
+  }
+  
+  // other operations expose the error
+  
   @Override
   public boolean isWrapperFor(Class<?> arg0) throws SQLException {
     throw error();
@@ -301,52 +346,12 @@ abstract class AbstractErrorSqlConnection implements Connection {
   }
 
   @Override
-  public void setAutoCommit(boolean arg0) throws SQLException {
-    throw error();
-  }
-
-  @Override
-  public void setCatalog(String arg0) throws SQLException {
-    throw error();
-  }
-
-  @Override
-  public void setHoldability(int arg0) throws SQLException {
-    throw error();
-  }
-
-  @Override
-  public void setNetworkTimeout(Executor arg0, int arg1) throws SQLException {
-    throw error();
-  }
-
-  @Override
-  public void setReadOnly(boolean arg0) throws SQLException {
-    throw error();
-  }
-
-  @Override
   public Savepoint setSavepoint() throws SQLException {
     throw error();
   }
 
   @Override
   public Savepoint setSavepoint(String arg0) throws SQLException {
-    throw error();
-  }
-
-  @Override
-  public void setSchema(String arg0) throws SQLException {
-    throw error();
-  }
-
-  @Override
-  public void setTransactionIsolation(int arg0) throws SQLException {
-    throw error();
-  }
-
-  @Override
-  public void setTypeMap(Map<String, Class<?>> arg0) throws SQLException {
     throw error();
   }
 }
