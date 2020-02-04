@@ -2,7 +2,6 @@ subprojects {
   apply plugin: 'java'
   apply plugin: 'checkstyle'
   apply plugin: 'jacoco'
-  apply plugin: 'maven'
 
   repositories {
     mavenCentral()
@@ -54,7 +53,7 @@ subprojects {
 
   jar {
     manifest {
-      attributes 'Implementation-Title': 'auroraArc', 'Implementation-Version': version
+      attributes 'Implementation-Title': 'auroraArc', 'Implementation-Version': archiveVersion
     }
   }
 
@@ -77,7 +76,7 @@ subprojects {
 
   task copyLibs(type: Copy) {
     into "$buildDir/dependencies/"
-    from configurations.testRuntime
+    from configurations.testRuntimeClasspath
   }
 
   artifacts {
@@ -91,7 +90,7 @@ project(':arcCommon') {
   archivesBaseName = 'arcCommon'
 
   dependencies {
-    testCompile (
+    testImplementation (
       "junit:junit:$junitVersion",
       "org.mockito:mockito-core:$mockitoVersion",
       "org.jdbi:jdbi:$jdbiVersion",
@@ -100,7 +99,7 @@ project(':arcCommon') {
       "ch.qos.logback:logback-classic:$logbackVersion"
     )
 
-    compile (
+    implementation (
       "org.threadly:threadly:$threadlyVersion"
     )
   }
@@ -110,7 +109,7 @@ project(':mysqlAuroraArc') {
   archivesBaseName = 'auroraArc-mysql'
 
   dependencies {
-    testCompile (
+    testImplementation (
       project(':arcCommon').sourceSets.test.output,
       "junit:junit:$junitVersion",
       "org.mockito:mockito-core:$mockitoVersion",
@@ -120,8 +119,9 @@ project(':mysqlAuroraArc') {
       "ch.qos.logback:logback-classic:$logbackVersion"
     )
 
-    compile (
+    implementation (
       project(":arcCommon"),
+      "org.threadly:threadly:$threadlyVersion",
       "mysql:mysql-connector-java:$mysqlVersion"
     )
   }
@@ -131,14 +131,15 @@ project(':psqlAuroraArc') {
   archivesBaseName = 'auroraArc-psql'
 
   dependencies {
-    testCompile (
+    testImplementation (
       project(':arcCommon').sourceSets.test.output,
       "junit:junit:$junitVersion",
       "org.mockito:mockito-core:$mockitoVersion"
     )
 
-    compile (
+    implementation (
       project(":arcCommon"),
+      "org.threadly:threadly:$threadlyVersion",
       "org.postgresql:postgresql:$psqlVersion"
     )
   }

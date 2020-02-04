@@ -1,8 +1,23 @@
+def findJVM() {
+  String[] java8Paths = new String[5]
+  java8Paths[0] = "/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/"
+  java8Paths[1] = "/usr/lib/jvm/java-8-openjdk/jre/lib/"
+  java8Paths[2] = "/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/"
+  java8Paths[3] = "/usr/lib/jvm/java-1.8.0-openjdk/jre/lib/"
+  java8Paths[4] = "/usr/lib/jvm/java-8-sun/jre/lib/"
+  for (String path : java8Paths) {
+    if (new java.io.File(path).exists()) {
+      return path
+    }
+  }
+  return null
+}
+
 subprojects {
   apply plugin: 'java'
   apply plugin: 'checkstyle'
   apply plugin: 'jacoco'
-  apply plugin: 'maven'
+  apply plugin: 'maven-publish'
   apply plugin: 'signing'
 
   repositories {
@@ -16,97 +31,18 @@ subprojects {
   targetCompatibility = 1.8
 
   compileJava {
-    String[] java8Paths = new String[9]
-    java8Paths[0] = "/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/"
-    java8Paths[1] = "/usr/lib/jvm/java-8-openjdk/jre/lib/"
-    java8Paths[2] = "/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/"
-    java8Paths[3] = "/usr/lib/jvm/java-1.8.0-openjdk/jre/lib/"
-    java8Paths[4] = "/usr/lib/jvm/java-8-sun/jre/lib/"
-    java8Paths[5] = "/usr/lib/jvm/jdk1.8.0_122/jre/lib/"
-    java8Paths[6] = "/usr/lib/jvm/jdk1.8.0_65/jre/lib/"
-    java8Paths[7] = "/usr/lib/jvm/jdk1.8.0_45/jre/lib/"
-    java8Paths[8] = "/usr/lib/jvm/jdk1.8.0_20/jre/lib/"
-    for (String path : java8Paths) {
-      if (new java.io.File(path).exists()) {
-        println 'Using java 8: ' + path
-        options.bootstrapClasspath = fileTree(include: ['*.jar'], dir: path)
-        break
-      }
-    }
-    if (options.bootstrapClasspath == null) {
+    def jvmPath = findJVM()
+    if (jvmPath == null) {
       println 'Unable to find java 8 rt.jar, will cause failure so exiting now'
       println ''
       System.exit(1)
     }
+    println 'Using java 8: ' + jvmPath
+    options.bootstrapClasspath = fileTree(include: ['*.jar'], dir: jvmPath)
   }
 
   compileTestJava {
-    String[] java8Paths = new String[9]
-    java8Paths[0] = "/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/"
-    java8Paths[1] = "/usr/lib/jvm/java-8-openjdk/jre/lib/"
-    java8Paths[2] = "/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/"
-    java8Paths[3] = "/usr/lib/jvm/java-1.8.0-openjdk/jre/lib/"
-    java8Paths[4] = "/usr/lib/jvm/java-8-sun/jre/lib/"
-    java8Paths[5] = "/usr/lib/jvm/jdk1.8.0_122/jre/lib/"
-    java8Paths[6] = "/usr/lib/jvm/jdk1.8.0_65/jre/lib/"
-    java8Paths[7] = "/usr/lib/jvm/jdk1.8.0_45/jre/lib/"
-    java8Paths[8] = "/usr/lib/jvm/jdk1.8.0_20/jre/lib/"
-    for (String path : java8Paths) {
-      if (new java.io.File(path).exists()) {
-        options.bootstrapClasspath = fileTree(include: ['*.jar'], dir: path)
-        break
-      }
-    }
-  }
-
-  signing {
-    sign configurations.archives
-  }
-
-  uploadArchives {
-    repositories {
-      mavenDeployer {
-        beforeDeployment {
-          MavenDeployment deployment -> signing.signPom(deployment)
-        }
-   
-        repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
-          authentication(userName: sonatypeUsername, password: sonatypePassword)
-        }
-        snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots") {
-          authentication(userName: sonatypeUsername, password: sonatypePassword)
-        }
-   
-        pom.project {
-          name 'auroraArc'
-          packaging 'jar'
-          description 'JDBC driver for AWS Aurora databases.'
-          url 'http://threadly.org/'
-   
-          scm {
-            url 'scm:git@github.com:threadly/auroraArc.git'
-            connection 'scm:git@github.com:threadly/auroraArc.git'
-            developerConnection 'scm:git@github.com:threadly/auroraArc.git'
-          }
-   
-          licenses {
-            license {
-              name 'Mozilla Public License Version 2.0'
-              url 'https://www.mozilla.org/MPL/2.0/'
-              distribution 'repo'
-            }
-          }
-   
-          developers {
-            developer {
-              id 'jent'
-              name 'Mike Jensen'
-              email 'jent@threadly.org'
-            }
-          }
-        }
-      }
-    }
+    options.bootstrapClasspath = fileTree(include: ['*.jar'], dir: findJVM())
   }
 
   compileJava {
@@ -135,10 +71,6 @@ subprojects {
   build.dependsOn jacocoTestReport
 
   jacocoTestReport {
-    doFirst {
-      classDirectories = fileTree(dir: 'build/classes/java/main', include: 'org/threadly/**')
-      sourceDirectories = fileTree(dir: 'src/main/java', include: 'org/threadly/**')
-    }
     reports {
       csv.enabled = false
       xml.enabled = true
@@ -156,7 +88,7 @@ subprojects {
 
   jar {
     manifest {
-      attributes 'Implementation-Title': 'auroraArc', 'Implementation-Version': version
+      attributes 'Implementation-Title': 'auroraArc', 'Implementation-Version': archiveVersion
     }
   }
 
@@ -179,7 +111,7 @@ subprojects {
 
   task copyLibs(type: Copy) {
     into "$buildDir/dependencies/"
-    from configurations.testRuntime
+    from configurations.testRuntimeClasspath
   }
 
   artifacts {
@@ -187,13 +119,91 @@ subprojects {
     archives javadocJar
     archives sourcesJar
   }
+
+  signing {
+    sign configurations.archives
+    if (! version.contains('SNAPSHOT')) {
+      sign publishing.publications
+    }
+  }
+
+  publishing {
+    publications {
+      mavenJava(MavenPublication) {
+        pom {
+          name = 'auroraArc'
+          description = 'JDBC driver for AWS Aurora databases.'
+          url = 'http://threadly.org/'
+     
+          scm {
+            url = 'scm:git@github.com:threadly/auroraArc.git'
+            connection = 'scm:git@github.com:threadly/auroraArc.git'
+            developerConnection = 'scm:git@github.com:threadly/auroraArc.git'
+          }
+     
+          issueManagement {
+            system = 'GitHub'
+            url = 'https://github.com/threadly/auroraArc/issues'
+          }
+
+          licenses {
+            license {
+              name = 'Mozilla Public License Version 2.0'
+              url = 'https://www.mozilla.org/MPL/2.0/'
+              distribution = 'repo'
+            }
+          }
+   
+          developers {
+            developer {
+              id = 'jent'
+              name = 'Mike Jensen'
+              email = 'jent@threadly.org'
+            }
+          }
+        }
+
+        from components.java
+
+        artifact(sourcesJar) {
+          classifier = 'sources'
+        }
+        artifact(javadocJar) {
+          classifier = 'javadoc'
+        }
+      }
+    }
+    repositories {
+      maven {
+        def releasesRepoUrl =  "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+        def snapshotsRepoUrl = "https://oss.sonatype.org/content/repositories/snapshots"
+        url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
+        credentials {
+          username sonatypeUsername
+          password sonatypePassword
+        }
+      }
+    }
+  }
+
+  model {
+    tasks.generatePomFileForMavenJavaPublication {
+      destination = file("$buildDir/generated-pom.xml")
+    }
+    tasks.publishMavenJavaPublicationToMavenLocal {
+      dependsOn project.tasks.signArchives
+    }
+    tasks.publishMavenJavaPublicationToMavenRepository {
+      dependsOn project.tasks.signArchives
+    }
+  }
 }
 
 project(':arcCommon') {
   archivesBaseName = 'arcCommon'
 
   dependencies {
-    testCompile (
+    testImplementation (
       "junit:junit:$junitVersion",
       "org.mockito:mockito-core:$mockitoVersion",
       "org.jdbi:jdbi:$jdbiVersion",
@@ -202,7 +212,7 @@ project(':arcCommon') {
       "ch.qos.logback:logback-classic:$logbackVersion"
     )
 
-    compile (
+    implementation (
       "org.threadly:threadly:$threadlyVersion"
     )
   }
@@ -212,7 +222,7 @@ project(':mysqlAuroraArc') {
   archivesBaseName = 'auroraArc-mysql'
 
   dependencies {
-    testCompile (
+    testImplementation (
       project(':arcCommon').sourceSets.test.output,
       "junit:junit:$junitVersion",
       "org.mockito:mockito-core:$mockitoVersion",
@@ -222,8 +232,9 @@ project(':mysqlAuroraArc') {
       "ch.qos.logback:logback-classic:$logbackVersion"
     )
 
-    compile (
+    implementation (
       project(":arcCommon"),
+      "org.threadly:threadly:$threadlyVersion",
       "mysql:mysql-connector-java:$mysqlVersion"
     )
   }
@@ -233,14 +244,15 @@ project(':psqlAuroraArc') {
   archivesBaseName = 'auroraArc-psql'
 
   dependencies {
-    testCompile (
+    testImplementation (
       project(':arcCommon').sourceSets.test.output,
       "junit:junit:$junitVersion",
       "org.mockito:mockito-core:$mockitoVersion"
     )
 
-    compile (
+    implementation (
       project(":arcCommon"),
+      "org.threadly:threadly:$threadlyVersion",
       "org.postgresql:postgresql:$psqlVersion"
     )
   }
