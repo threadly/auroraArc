@@ -26,5 +26,6 @@
 	<classpathentry kind="lib" path="arcCommon/build/dependencies/mockito-core-3.2.4.jar"/>
 	<classpathentry kind="lib" path="mysqlAuroraArc/build/dependencies/mysql-connector-java-8.0.19.jar"/>
 	<classpathentry kind="lib" path="psqlAuroraArc/build/dependencies/postgresql-42.2.9.jar"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/threadly-test"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

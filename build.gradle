@@ -91,6 +91,7 @@ project(':arcCommon') {
 
   dependencies {
     testImplementation (
+      "org.threadly:threadly-test:$threadlyTestVersion",
       "junit:junit:$junitVersion",
       "org.mockito:mockito-core:$mockitoVersion",
       "org.jdbi:jdbi:$jdbiVersion",
