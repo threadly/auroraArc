@@ -10,26 +10,27 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Properties;
 
+import org.jdbi.v3.core.Handle;
+import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.mapper.RowMapper;
+import org.jdbi.v3.core.result.ResultIterator;
+import org.jdbi.v3.core.statement.StatementContext;
+import org.jdbi.v3.core.transaction.TransactionIsolationLevel;
+import org.jdbi.v3.sqlobject.SqlObjectPlugin;
+import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
+import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.FetchSize;
+import org.jdbi.v3.sqlobject.statement.GetGeneratedKeys;
+import org.jdbi.v3.sqlobject.statement.SqlQuery;
+import org.jdbi.v3.sqlobject.statement.SqlUpdate;
+import org.jdbi.v3.sqlobject.transaction.Transaction;
+import org.jdbi.v3.sqlobject.transaction.Transactional;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
-import org.skife.jdbi.v2.DBI;
-import org.skife.jdbi.v2.Handle;
-import org.skife.jdbi.v2.ResultIterator;
-import org.skife.jdbi.v2.StatementContext;
-import org.skife.jdbi.v2.TransactionIsolationLevel;
-import org.skife.jdbi.v2.sqlobject.Bind;
-import org.skife.jdbi.v2.sqlobject.GetGeneratedKeys;
-import org.skife.jdbi.v2.sqlobject.SqlQuery;
-import org.skife.jdbi.v2.sqlobject.SqlUpdate;
-import org.skife.jdbi.v2.sqlobject.Transaction;
-import org.skife.jdbi.v2.sqlobject.customizers.FetchSize;
-import org.skife.jdbi.v2.sqlobject.customizers.RegisterMapper;
-import org.skife.jdbi.v2.sqlobject.mixins.Transactional;
-import org.skife.jdbi.v2.tweak.ResultSetMapper;
 import org.threadly.concurrent.UnfairExecutor;
 import org.threadly.db.LoggingDriver;
 import org.threadly.db.aurora.Driver;
@@ -45,7 +46,7 @@ import org.threadly.util.StackSuppressedRuntimeException;
 public class DriverLocalDbTest {
   private static final boolean LOGGING_DRIVER = false;
   private static final boolean OPTIMIZED_DRIVER = true;
-  protected static DBI DBI;
+  protected static Jdbi DBI;
 
   @BeforeClass
   public static void setupClass() {
@@ -54,12 +55,13 @@ public class DriverLocalDbTest {
     } else {
       Driver.registerDriver();
     }
-    DBI = new DBI("jdbc:mysql:" + (LOGGING_DRIVER ? "logging" : "aurora") + "://" +  
-                    "127.0.0.1:3306,127.0.0.2:3306,127.0.0.3:3306,127.0.0.4:3306" + 
-                    "/auroraArc?" + 
-                    "useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false" + 
-                    (OPTIMIZED_DRIVER ? "&optimizedStateUpdates=true" : ""),
-                  "auroraArc", "");
+    DBI = Jdbi.create("jdbc:mysql:" + (LOGGING_DRIVER ? "logging" : "aurora") + "://" +  
+                        "127.0.0.1:3306,127.0.0.2:3306,127.0.0.3:3306,127.0.0.4:3306" + 
+                        "/auroraArc?" + 
+                        "useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false" + 
+                        (OPTIMIZED_DRIVER ? "&optimizedStateUpdates=true" : ""),
+                      "auroraArc", "");
+    DBI.installPlugin(new SqlObjectPlugin());
   }
   
   protected Handle h;
@@ -72,8 +74,8 @@ public class DriverLocalDbTest {
   }
 
   @After
-  public void cleanup() {
-    dao.close();
+  public void cleanup() throws SQLException {
+    dao.getHandle().close();
     dao = null;
     h.close();
     h = null;
@@ -156,7 +158,7 @@ public class DriverLocalDbTest {
 
   @Test
   public void a2_transactionInsertAndLookup() {
-    dao.inTransaction((txDao, txStatus) -> {
+    dao.inTransaction((txDao) -> {
       txDao.lookupRecord(1);
       txDao.insertRecordAndReturnId(StringUtils.makeRandomString(5));
       return txDao.recordCount();
@@ -235,14 +237,14 @@ public class DriverLocalDbTest {
 
   @Test (expected = StackSuppressedRuntimeException.class)
   public void transactionInsertAndLookupExceptionThrownBeforeAnyAction() {
-    dao.inTransaction((txDao, txStatus) -> {
+    dao.inTransaction((txDao) -> {
       throw new StackSuppressedRuntimeException();
     });
   }
 
   @Test (expected = StackSuppressedRuntimeException.class)
   public void transactionInsertAndLookupExceptionThrownAfterLookup() {
-    dao.inTransaction((txDao, txStatus) -> {
+    dao.inTransaction((txDao) -> {
       txDao.lookupRecord(1);
       throw new StackSuppressedRuntimeException();
     });
@@ -250,7 +252,7 @@ public class DriverLocalDbTest {
 
   @Test (expected = StackSuppressedRuntimeException.class)
   public void transactionInsertAndLookupExceptionThrownAfterDone() {
-    dao.inTransaction((txDao, txStatus) -> {
+    dao.inTransaction((txDao) -> {
       txDao.lookupRecord(1);
       txDao.insertRecordAndReturnId(StringUtils.makeRandomString(5));
       throw new StackSuppressedRuntimeException();
@@ -265,9 +267,9 @@ public class DriverLocalDbTest {
     AuroraClusterMonitor.MONITORS.put(new AuroraServersKey(servers), 
                                       new AuroraClusterMonitor(mock(ClusterChecker.class)));
     
-    DBI dbi = new DBI("jdbc:mysql:aurora://127.0.0.1:3306,127.0.0.2:6603/auroraArc?" + 
-                        "useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false",
-                      "auroraArc", "");
+    Jdbi dbi = Jdbi.create("jdbc:mysql:aurora://127.0.0.1:3306,127.0.0.2:6603/auroraArc?" + 
+                             "useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false",
+                           "auroraArc", "");
     
     try (Handle h = dbi.open()) {
       assertTrue(h.getConnection().isValid(0));
@@ -291,43 +293,41 @@ public class DriverLocalDbTest {
     dao.lookupRecordsCreatedBefore(new Timestamp(Clock.lastKnownTimeMillis()));
   }
 
-  @RegisterMapper(RecordPairMapper.class)
-  public abstract static class JdbiDao implements Transactional<JdbiDao> {
+  @RegisterRowMapper(RecordPairMapper.class)
+  public interface JdbiDao extends Transactional<JdbiDao> {
     @SqlUpdate("INSERT INTO records (value, created_date) VALUES (:record, NOW())")
-    public abstract void insertRecord(@Bind("record") String record);
+    public void insertRecord(@Bind("record") String record);
 
     @SqlUpdate("DELETE FROM records WHERE id != 1")
-    public abstract void deleteRecords();
+    public void deleteRecords();
 
     @GetGeneratedKeys
     @SqlUpdate("INSERT INTO records (value, created_date) VALUES (:record, NOW())")
-    public abstract int insertRecordAndReturnId(@Bind("record") String record);
+    public int insertRecordAndReturnId(@Bind("record") String record);
 
     @Transaction (value = TransactionIsolationLevel.SERIALIZABLE)
-    public int insertRecordAndReturnCount(String record) {
+    default int insertRecordAndReturnCount(String record) {
       insertRecordAndReturnId(record);
       return recordCount();
     }
 
     @SqlQuery("SELECT COUNT(*) FROM records")
-    public abstract int recordCount();
+    public int recordCount();
 
     @SqlQuery("SELECT * FROM records WHERE id = :id")
-    public abstract Pair<Long, String> lookupRecord(@Bind("id") int id);
+    public Pair<Long, String> lookupRecord(@Bind("id") int id);
 
     @SqlQuery("SELECT * FROM records WHERE created_date < :time LIMIT 10000")
-    public abstract List<Pair<Long, String>> lookupRecordsCreatedBefore(@Bind("time") Timestamp timestamp);
+    public List<Pair<Long, String>> lookupRecordsCreatedBefore(@Bind("time") Timestamp timestamp);
 
     @FetchSize(Integer.MIN_VALUE)
     @SqlQuery("SELECT * FROM records LIMIT 10000")
-    public abstract ResultIterator<Pair<Long, String>> lookupAllRecords();
-
-    public abstract void close();
+    public ResultIterator<Pair<Long, String>> lookupAllRecords();
   }
 
-  public static class RecordPairMapper implements ResultSetMapper<Pair<Long, String>> {
+  public static class RecordPairMapper implements RowMapper<Pair<Long, String>> {
     @Override
-    public Pair<Long, String> map(int index, ResultSet r, StatementContext ctx) throws SQLException {
+    public Pair<Long, String> map(ResultSet r, StatementContext ctx) throws SQLException {
       return new Pair<>(r.getDate("created_date").getTime(), r.getString("value"));
     }
   }

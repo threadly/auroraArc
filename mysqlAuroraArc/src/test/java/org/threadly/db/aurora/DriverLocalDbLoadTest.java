@@ -7,13 +7,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import org.jdbi.v3.core.Handle;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
-import org.skife.jdbi.v2.Handle;
 import org.threadly.concurrent.PriorityScheduler;
 import org.threadly.concurrent.SameThreadSubmitterExecutor;
 import org.threadly.concurrent.SubmitterExecutor;
@@ -71,7 +71,11 @@ public class DriverLocalDbLoadTest {
       }
     }
     for (DriverLocalDbTest dt : toCleanup) {
-      dt.cleanup();
+      try {
+        dt.cleanup();
+      } catch (SQLException e) {
+        e.printStackTrace();
+      }
     }
   }
 

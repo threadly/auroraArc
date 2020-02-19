@@ -94,7 +94,8 @@ project(':arcCommon') {
       "org.threadly:threadly-test:$threadlyTestVersion",
       "junit:junit:$junitVersion",
       "org.mockito:mockito-core:$mockitoVersion",
-      "org.jdbi:jdbi:$jdbiVersion",
+      "org.jdbi:jdbi3-core:$jdbiVersion",
+      "org.jdbi:jdbi3-sqlobject:$jdbiVersion",
       "com.zaxxer:HikariCP:$hikariVersion",
       "ch.qos.logback:logback-core:$logbackVersion",
       "ch.qos.logback:logback-classic:$logbackVersion"
@@ -114,7 +115,8 @@ project(':mysqlAuroraArc') {
       project(':arcCommon').sourceSets.test.output,
       "junit:junit:$junitVersion",
       "org.mockito:mockito-core:$mockitoVersion",
-      "org.jdbi:jdbi:$jdbiVersion",
+      "org.jdbi:jdbi3-core:$jdbiVersion",
+      "org.jdbi:jdbi3-sqlobject:$jdbiVersion",
       "com.zaxxer:HikariCP:$hikariVersion",
       "ch.qos.logback:logback-core:$logbackVersion",
       "ch.qos.logback:logback-classic:$logbackVersion"

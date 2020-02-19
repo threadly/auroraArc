@@ -8,17 +8,18 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 
-import org.skife.jdbi.v2.DBI;
-import org.skife.jdbi.v2.ResultIterator;
-import org.skife.jdbi.v2.StatementContext;
-import org.skife.jdbi.v2.sqlobject.Bind;
-import org.skife.jdbi.v2.sqlobject.GetGeneratedKeys;
-import org.skife.jdbi.v2.sqlobject.SqlQuery;
-import org.skife.jdbi.v2.sqlobject.SqlUpdate;
-import org.skife.jdbi.v2.sqlobject.customizers.FetchSize;
-import org.skife.jdbi.v2.sqlobject.customizers.RegisterMapper;
-import org.skife.jdbi.v2.sqlobject.mixins.Transactional;
-import org.skife.jdbi.v2.tweak.ResultSetMapper;
+import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.mapper.RowMapper;
+import org.jdbi.v3.core.result.ResultIterator;
+import org.jdbi.v3.core.statement.StatementContext;
+import org.jdbi.v3.sqlobject.SqlObjectPlugin;
+import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
+import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.FetchSize;
+import org.jdbi.v3.sqlobject.statement.GetGeneratedKeys;
+import org.jdbi.v3.sqlobject.statement.SqlQuery;
+import org.jdbi.v3.sqlobject.statement.SqlUpdate;
+import org.jdbi.v3.sqlobject.transaction.Transactional;
 import org.slf4j.LoggerFactory;
 import org.threadly.concurrent.PriorityScheduler;
 import org.threadly.concurrent.PrioritySchedulerService;
@@ -89,7 +90,7 @@ public class AuroraLoadGenerator {
       }
     }, 10_000, 10_000);
     
-    DBI dbi;
+    Jdbi dbi;
     if (POOLED) {
       HikariConfig c = new HikariConfig();
       c.setUsername(user);
@@ -109,15 +110,16 @@ public class AuroraLoadGenerator {
       c.setLeakDetectionThreshold(0);
       c.setPoolName("auroraArc");
   
-      dbi = new DBI(new HikariDataSource(c));
+      dbi = Jdbi.create(new HikariDataSource(c));
     } else {
-      dbi = new DBI(LoggingDriver.URL_PREFIX + servers + "/" + dbName + 
-                      "?connectTimeout=10000&socketTimeout=10000&useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC",
-                    user, password);
+      dbi = Jdbi.create(LoggingDriver.URL_PREFIX + servers + "/" + dbName + 
+                          "?connectTimeout=10000&socketTimeout=10000&useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC",
+                        user, password);
     }
+    dbi.installPlugin(new SqlObjectPlugin());
     
     for (int i = 0; i < ALL_RECORD_ITERATOR_COUNT; i++) {
-      final JdbiDao dao = POOLED ? dbi.onDemand(JdbiDao.class) : dbi.open(JdbiDao.class);
+      final JdbiDao dao = POOLED ? dbi.onDemand(JdbiDao.class) : dbi.open().attach(JdbiDao.class);
       scheduler.scheduleWithFixedDelay(() -> {
         int count = 0;
         try {
@@ -139,7 +141,7 @@ public class AuroraLoadGenerator {
     final Queue<Pair<Integer, String>> toQueryQueue = new ConcurrentLinkedQueue<>(); 
     
     for (int i = 0; i < INSERT_COUNT; i++) {
-      final JdbiDao dao = POOLED ? dbi.onDemand(JdbiDao.class) : dbi.open(JdbiDao.class);
+      final JdbiDao dao = POOLED ? dbi.onDemand(JdbiDao.class) : dbi.open().attach(JdbiDao.class);
       scheduler.scheduleWithFixedDelay(() -> {
         try {
           final String value = StringUtils.makeRandomString(10);
@@ -156,7 +158,7 @@ public class AuroraLoadGenerator {
     }
     
     for (int i = 0; i < SELECT_COUNT; i++) {
-      final JdbiDao dao = POOLED ? dbi.onDemand(JdbiDao.class) : dbi.open(JdbiDao.class);
+      final JdbiDao dao = POOLED ? dbi.onDemand(JdbiDao.class) : dbi.open().attach(JdbiDao.class);
       scheduler.scheduleWithFixedDelay(() -> {
         Pair<Integer, String> p = toQueryQueue.poll();
         if (p != null) {
@@ -179,7 +181,7 @@ public class AuroraLoadGenerator {
     System.out.println("All db tasks submitted");
   }
 
-  @RegisterMapper(RecordPairMapper.class)
+  @RegisterRowMapper(RecordPairMapper.class)
   public abstract static class JdbiDao implements Transactional<JdbiDao> {
     @GetGeneratedKeys
     @SqlUpdate("INSERT INTO records (value, created_date) VALUES (:record, NOW())")
@@ -195,9 +197,9 @@ public class AuroraLoadGenerator {
     public abstract void close();
   }
 
-  public static class RecordPairMapper implements ResultSetMapper<Pair<Long, String>> {
+  public static class RecordPairMapper implements RowMapper<Pair<Long, String>> {
     @Override
-    public Pair<Long, String> map(int index, ResultSet r, StatementContext ctx) throws SQLException {
+    public Pair<Long, String> map(ResultSet r, StatementContext ctx) throws SQLException {
       return new Pair<>(r.getDate("created_date").getTime(), r.getString("value"));
     }
   }

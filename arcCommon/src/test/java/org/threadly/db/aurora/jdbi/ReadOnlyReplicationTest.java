@@ -9,12 +9,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.sqlobject.SqlObjectPlugin;
+import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.skife.jdbi.v2.DBI;
-import org.skife.jdbi.v2.sqlobject.SqlQuery;
 import org.threadly.db.LoggingDriver;
 import org.threadly.db.aurora.DelegateAuroraDriver;
 import org.threadly.db.aurora.DelegateMockDriver;
@@ -27,7 +28,7 @@ public class ReadOnlyReplicationTest {
   private MockDriver mockDriver;
   private Connection slaveMockConnection;
   private Connection masterMockConnection;
-  private DBI dbi;
+  private Jdbi dbi;
   
   @BeforeClass
   public static void setupClass() {
@@ -41,10 +42,11 @@ public class ReadOnlyReplicationTest {
     slaveMockConnection = mockDriver.getConnectionForHost(slaveHost);
     masterMockConnection = mockDriver.getConnectionForHost(DelegateMockDriver.MASTER_HOST);
 
-    dbi = new DBI(DelegateAuroraDriver.getAnyDelegateDriver().getArcPrefix() +  
-                    slaveHost + "," + DelegateMockDriver.MASTER_HOST + 
-                    "/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC",
-                  "auroraArc", "");
+    dbi = Jdbi.create(DelegateAuroraDriver.getAnyDelegateDriver().getArcPrefix() +  
+                        slaveHost + "," + DelegateMockDriver.MASTER_HOST + 
+                        "/auroraArc?useUnicode=yes&characterEncoding=UTF-8&serverTimezone=UTC",
+                      "auroraArc", "");
+    dbi.installPlugin(new SqlObjectPlugin());
   }
 
   @After
@@ -63,6 +65,9 @@ public class ReadOnlyReplicationTest {
     when(mockPreparedStatement.getResultSet()).thenReturn(mock(ResultSet.class));
     when(connection.prepareStatement("SELECT test FROM fake_table LIMIT 1"))
       .thenReturn(mockPreparedStatement);
+    when(connection.prepareStatement(eq("SELECT test FROM fake_table LIMIT 1"), anyInt(), anyInt()))
+      .thenReturn(mockPreparedStatement);
+    when(mockPreparedStatement.execute()).thenReturn(true);
     return mockPreparedStatement;
   }
   
