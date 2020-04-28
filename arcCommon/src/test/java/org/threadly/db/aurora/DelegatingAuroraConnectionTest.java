@@ -1,4 +1,4 @@
-package org.threadly.db.aurora;
+ package org.threadly.db.aurora;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -32,9 +32,9 @@ public class DelegatingAuroraConnectionTest {
     mockDriver = DelegateMockDriver.setupMockDriverAsDelegate().getLeft();
     mockConnection1 = mockDriver.getConnectionForHost(MASTER_HOST);
     mockConnection2 = mockDriver.getConnectionForHost(REPLICA_HOST);
-    auroraConnection = new DelegatingAuroraConnection(DelegateAuroraDriver.getAnyDelegateDriver().getArcPrefix() + 
-                                                      MASTER_HOST + "," + REPLICA_HOST + 
-                                                        "/auroraArc", 
+    auroraConnection = new DelegatingAuroraConnection(DelegateAuroraDriver.getAnyDelegateDriver().getArcPrefix() +
+                                                      MASTER_HOST + "," + REPLICA_HOST +
+                                                        "/auroraArc?auroraArcColocatedServers=1",
                                                       new Properties());
     new TestCondition(() -> {
       try {
@@ -74,6 +74,24 @@ public class DelegatingAuroraConnectionTest {
     assertFalse(auroraConnection.servers[0].equals(auroraConnection.servers[1]));
   }
   
+  @Test
+  public void serverColocationTest() throws SQLException {
+    cleanup();  // don't use normal test setup
+
+    mockDriver = DelegateMockDriver.setupMockDriverAsDelegate().getLeft();
+    auroraConnection = new DelegatingAuroraConnection(
+      DelegateAuroraDriver.getAnyDelegateDriver().getArcPrefix() +
+      "fooHost1,fooHost2,fooHost3,fooHost4,fooHost2" +
+      "/auroraArc?property1=foo&auroraArcColocatedServers=2&property2=bar",
+      new Properties());
+
+    assertEquals(4, auroraConnection.servers.length);
+    assertTrue(auroraConnection.servers[0].isColocated());
+    assertTrue(auroraConnection.servers[1].isColocated());
+    assertFalse(auroraConnection.servers[2].isColocated());
+    assertFalse(auroraConnection.servers[3].isColocated());
+  }
+
   @Test
   public void setClientInfoDelegateDefaultTest() throws SQLClientInfoException {
     assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART, 
@@ -184,6 +202,17 @@ public class DelegatingAuroraConnectionTest {
     fail("Exception should have thrown");
   }
   
+  @Test
+  public void getDelegateColocatedPreferred() throws SQLException {
+    auroraConnection.setClientInfo(
+      DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE,
+      DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_COLOCATED_PREFERRED);
+
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_COLOCATED_PREFERRED,
+                 auroraConnection.delegateChoice);
+    assertEquals(MASTER_HOST, auroraConnection.getDelegate().getLeft().getHost());
+  }
+
   @Test
   public void isValidTest() throws SQLException {
     auroraConnection.isValid(1000);

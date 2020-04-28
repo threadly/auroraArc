@@ -7,19 +7,24 @@ import java.util.Properties;
  */
 public class AuroraServer implements Comparable<AuroraServer> {
   private static final int DEFAULT_PORT = 3306;
-  
+
   private final String host;
   private final int port;
   private final Properties info;
+  private final boolean colocated;
   private final int hashCode;
 
   /**
    * Construct a new {@link AuroraServer} for a given {@code host:post} string.
-   * 
+   *
    * @param server Host and port within a single string
    * @param info Properties for the connection
    */
   public AuroraServer(String server, Properties info) {
+    this(server, info, false);
+  }
+
+  AuroraServer(String server, Properties info, boolean colocated) {
     int delim = server.indexOf(':');
     if (delim > 0) {
       host = server.substring(0, delim).intern();
@@ -29,6 +34,7 @@ public class AuroraServer implements Comparable<AuroraServer> {
       port = DEFAULT_PORT;
     }
     this.info = info; // not currently considered in equality or hash
+    this.colocated = colocated;
 
     hashCode = this.host.hashCode() ^ port;
   }
@@ -41,9 +47,14 @@ public class AuroraServer implements Comparable<AuroraServer> {
    * @param info Properties for the connection
    */
   public AuroraServer(String host, int port, Properties info) {
+    this(host, port, info, false);
+  }
+
+  AuroraServer(String host, int port, Properties info, boolean colocated) {
     this.host = host.intern();
     this.port = port;
     this.info = info; // not currently considered in equality or hash
+    this.colocated = colocated;
 
     hashCode = this.host.hashCode() ^ port;
   }
@@ -113,5 +124,9 @@ public class AuroraServer implements Comparable<AuroraServer> {
    */
   public Properties getProperties() {
     return info;
+  }
+
+  boolean isColocated() {
+    return colocated;
   }
 }

@@ -122,9 +122,37 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    * are healthy a {@link NoAuroraServerException} will be thrown.
    */
   public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_2_REPLICA_ONLY = "ReplicaPart2Only";
+  /**
+   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to
+   * {@link #setClientInfo(String, String)}.
+   *
+   * <p> This value will try to pick a random server from the set that were marked "colocated" with
+   * the local process, without regard to whether any particular server is master or replica. If
+   * none are configured or none are available, behaves like
+   * {@link CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY}.
+   *
+   * @see PROPERTY_COLOCATED_SERVERS
+   */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_COLOCATED_PREFERRED = "ColocatedPreferred";
   protected static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT = // may be set by providing null or empty
       CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART;
-  
+
+  /**
+   * Identifier for a connection property that can be set to inform AuroraArc which delegate servers
+   * are considered "colocated" with the local process.
+   *
+   * <p>If set, the value should be a non-negative integer indicating the number of servers which
+   * are to be considered colocated. E.g., if a value of <em>n</em> is given, the servers at indices
+   * 0 through <em>n</em>-1 will be considered colocated with the local process.
+   */
+  public static final String PROPERTY_COLOCATED_SERVERS = "auroraArcColocatedServers";
+
+  /**
+   * If this connection property is set to the value {@code true}, try to optimise state updates
+   * (such as transaction status) sent to the servers.
+   */
+  public static final String PROPERTY_OPTIMIZED_STATE_UPDATES = "optimizedStateUpdates";
+
   protected static final Logger LOG = Logger.getLogger(AuroraClusterMonitor.class.getSimpleName());
   
   /**
@@ -169,12 +197,44 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
       throw new IllegalArgumentException("Invalid URL: " + url);
     }
     driverName = dDriver.getDriverName();
-    
+
     int endDelim = url.indexOf('/', dDriver.getArcPrefix().length());
     if (endDelim < 0) {
       throw new IllegalArgumentException("Invalid URL: " + url);
     }
-    String urlArgs = url.substring(endDelim);
+
+    String urlTail = url.substring(endDelim);
+
+    boolean optimizedStateUpdates = false;
+    int colocatedServers = 0;
+
+    int urlArgsStart = url.indexOf('?', endDelim);
+    if (-1 != urlArgsStart) {
+      int argStart = urlArgsStart + 1;
+      while (argStart < url.length()) {
+        int argEnd = url.indexOf('&', argStart);
+        if (-1 == argEnd) {
+          argEnd = url.length();
+        }
+
+        int equal = url.indexOf('=', argStart);
+        if (equal > 0 && equal < argEnd) {
+          String argName = url.substring(argStart, equal);
+          switch (argName) {
+          case PROPERTY_OPTIMIZED_STATE_UPDATES:
+            optimizedStateUpdates = Boolean.valueOf(url.substring(equal + 1, argEnd));
+            break;
+
+          case PROPERTY_COLOCATED_SERVERS:
+            colocatedServers = Integer.parseInt(url.substring(equal + 1, argEnd));
+            break;
+          }
+        }
+
+        argStart = argEnd + 1;
+      }
+    }
+
     // TODO - lookup individual servers from a single cluster URL
     //        maybe derived from AuroraClusterMonitor to help ensure things remain consistent
     String[] servers = url.substring(dDriver.getArcPrefix().length(), endDelim).split(",");
@@ -187,13 +247,16 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
       for (int i2 = i1 + 1; i2 < serverCount; i2++) {
         if (servers[i1].equals(servers[i2])) {
           serverCount--;
+          if (colocatedServers > i2) {
+            colocatedServers--;
+          }
           System.arraycopy(servers, i2 + 1, servers, i2, serverCount - i2);
           i2--;
         }
       }
     }
-    
-    if (urlArgs.contains("optimizedStateUpdates=true")) {
+
+    if (optimizedStateUpdates) {
       connectionStateManager = new OptimizedConnectionStateManager();
     } else {
       connectionStateManager = new SafeConnectionStateManager();
@@ -208,9 +271,9 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
     // other connections to check the status
     Pair<AuroraServer, SQLException> connectException = null;
     for (int i = 0; i < serverCount; i++) {
-      this.servers[i] = new AuroraServer(servers[i], info);
+      this.servers[i] = new AuroraServer(servers[i], info, i < colocatedServers);
       try {
-        connections[i] = connectionStateManager.wrapConnection(dDriver.connect(servers[i] + urlArgs, info));
+        connections[i] = connectionStateManager.wrapConnection(dDriver.connect(servers[i] + urlTail, info));
         if (firstConnectionHolder == null) {
           firstConnectionHolder = connections[i];
         }
@@ -368,6 +431,8 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
         server = getAuroraServerReplicaHalf2Only();
       } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY.equals(delegateChoice)) {
         server = getAuroraServerAny();
+      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_COLOCATED_PREFERRED.equals(delegateChoice)) {
+        server = getAuroraServerColocatedPreferred();
       } else {
         delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT; // reset to prevent further failures
         throw new IllegalStateException("Unknown delegate choice: " + delegateChoice);
@@ -484,6 +549,15 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
       throw new NoAuroraServerException("No healthy servers");
     }
     return server;
+  }
+
+  protected AuroraServer getAuroraServerColocatedPreferred() throws SQLException {
+    AuroraServer server = clusterMonitor.getRandomColocatedServer();
+    if (null == server) {
+      return getAuroraServerAny();
+    } else {
+      return server;
+    }
   }
 
   @Override
@@ -638,6 +712,8 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
       delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_2_REPLICA_ONLY;
     } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY.equals(choice)) {
       delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_COLOCATED_PREFERRED.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_COLOCATED_PREFERRED;
     } else {
       throw new UnsupportedOperationException("Unknown delegate choice: " + choice);
     }

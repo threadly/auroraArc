@@ -144,17 +144,30 @@ public class AuroraClusterMonitor {
    * @return Random read only replica server, or {@code null} if no servers are healthy
    */
   public AuroraServer getRandomReadReplica() {
+    return getRandomFrom(clusterStateChecker.secondaryServers);
+  }
+
+  /**
+   * Return a random colocated server.
+   *
+   * @return Random colocated server, or {@code null} if there are no healthy colocated servers
+   */
+  public AuroraServer getRandomColocatedServer() {
+    return getRandomFrom(clusterStateChecker.colocatedServers);
+  }
+
+
+  private AuroraServer getRandomFrom(List<AuroraServer> servers) {
     while (true) {
-      int secondaryCount = clusterStateChecker.secondaryServers.size();
+      int count = servers.size();
       try {
-        if (secondaryCount == 1) {
-          return clusterStateChecker.secondaryServers.get(0);
-        } else if (secondaryCount == 0) {
+        if (count == 1) {
+          return servers.get(0);
+        } else if (count == 0) {
           return null;
         } else {
           long replicaIndex = this.replicaIndex.getAndIncrement();
-          return clusterStateChecker.secondaryServers.get(
-            (int)(replicaIndex & 0x7FFF_FFFF) % secondaryCount);
+          return servers.get((int)(replicaIndex & 0x7FFF_FFFF) % count);
         }
       } catch (IndexOutOfBoundsException e) {
         // secondary server was removed during check, loop and retry
@@ -271,6 +284,7 @@ public class AuroraClusterMonitor {
     protected final SchedulerService scheduler;
     protected final Map<AuroraServer, ServerMonitor> allServers;
     protected final List<AuroraServer> secondaryServers;
+    protected final List<AuroraServer> colocatedServers;
     protected final AtomicReference<AuroraServer> masterServer;
     protected final CopyOnWriteArrayList<AuroraServer> serversWaitingExpeditiedCheck;
     private volatile boolean initialized = false; // starts false to avoid updates while constructor is running
@@ -282,6 +296,7 @@ public class AuroraClusterMonitor {
       this.scheduler = scheduler;
       allServers = new HashMap<>();
       secondaryServers = new CopyOnWriteArrayList<>();
+      colocatedServers = new CopyOnWriteArrayList<>();
       serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
       masterServer = new AtomicReference<>();
 
@@ -296,6 +311,10 @@ public class AuroraClusterMonitor {
               masterServer.set(server);
             } else {
               secondaryServers.add(server);
+            }
+
+            if (server.isColocated()) {
+              colocatedServers.add(server);
             }
           }
         } else {  // all other checks can be async, adding in as secondary servers as they complete
@@ -320,6 +339,7 @@ public class AuroraClusterMonitor {
       this.scheduler = scheduler;
       allServers = clusterServers;
       secondaryServers = new CopyOnWriteArrayList<>();
+      colocatedServers = new CopyOnWriteArrayList<>();
       serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
       masterServer = new AtomicReference<>();
 
@@ -404,7 +424,15 @@ public class AuroraClusterMonitor {
               secondaryServers.add(p.getKey());
             }
           }
+
+          if (p.getKey().isColocated() && !colocatedServers.contains(p.getKey())) {
+            colocatedServers.add(p.getKey());
+          }
         } else {
+          if (p.getKey().isColocated()) {
+            colocatedServers.remove(p.getKey());
+          }
+
           if (secondaryServers.remove(p.getKey())) {
             // was secondary, so done
             // TODO - removal of a secondary server can indicate it will become a new primary
