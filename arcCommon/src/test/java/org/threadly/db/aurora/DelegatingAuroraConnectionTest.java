@@ -119,10 +119,10 @@ public class DelegatingAuroraConnectionTest {
   
   @Test
   public void getDelegateMasterPrefered() throws SQLException {
-    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
-                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED);
-    
-    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED, 
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE,
+                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED);
+
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED,
                  auroraConnection.delegateChoice);
     
     assertEquals(MASTER_HOST, auroraConnection.getDelegate().getLeft().getHost());
@@ -141,10 +141,10 @@ public class DelegatingAuroraConnectionTest {
   
   @Test
   public void getDelegateReplicaPefered() throws SQLException {
-    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
-                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED);
-    
-    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED, 
+    auroraConnection.setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE,
+                                   DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED);
+
+    assertEquals(DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED,
                  auroraConnection.delegateChoice);
     
     assertEquals(REPLICA_HOST, auroraConnection.getDelegate().getLeft().getHost());

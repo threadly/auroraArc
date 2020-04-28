@@ -37,9 +37,9 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    * <ul>
    * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART} (default) - Will provide a replica server if likely safe
    * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY} - Will provide any server available
-   * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED} - Will try to provide the master
+   * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED} - Will try to provide the master
    * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY} - Will only provide a healthy master
-   * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED} - Will try to provide a random replica
+   * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED} - Will try to provide a random replica
    * <li>{@link #CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY} - Will only provide a healthy replica
    * </ul>
    */
@@ -68,6 +68,11 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    * replica will be used.  If no servers are healthy a {@link NoAuroraServerException} will be 
    * thrown.
    */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED = "MasterPreferred";
+  /**
+   * @deprecated Use {@link CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED} instead
+   */
+  @Deprecated
   public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED = "MasterPrefered";
   /**
    * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
@@ -85,6 +90,11 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    * the master will be used.  If no servers are healthy a {@link NoAuroraServerException} will be 
    * thrown.
    */
+  public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED = "ReplicaPreferred";
+  /**
+   * @deprecated Use {@link CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED} instead.
+   */
+  @Deprecated
   public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED = "ReplicaPrefered";
   /**
    * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
@@ -339,13 +349,15 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
         return stickyConnection;
       }
 
+      // We don't need to handle the misspelled "*Prefered" names here because setDelegateChoice()
+      // handles that
       AuroraServer server;
       if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART.equals(delegateChoice)) {
         server = getAuroraServerSmart();
-      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED.equals(delegateChoice)) {
-        server = getAuroraServerMasterPrefered();
-      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED.equals(delegateChoice)) {
-        server = getAuroraServerReplicaPrefered();
+      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED.equals(delegateChoice)) {
+        server = getAuroraServerMasterPreferred();
+      } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED.equals(delegateChoice)) {
+        server = getAuroraServerReplicaPreferred();
       } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY.equals(delegateChoice)) {
         server = getAuroraServerMasterOnly();
       } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY.equals(delegateChoice)) {
@@ -373,16 +385,16 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
       throw new IllegalStateException("Cluster monitor provided unknown server: " + server);
     }
   }
-  
+
   protected AuroraServer getAuroraServerSmart() throws SQLException {
     if (connectionStateManager.isReadOnly()) {
-      return getAuroraServerReplicaPrefered();
+      return getAuroraServerReplicaPreferred();
     } else {
-      return getAuroraServerMasterPrefered();
+      return getAuroraServerMasterPreferred();
     }
   }
-  
-  protected AuroraServer getAuroraServerMasterPrefered() throws SQLException {
+
+  protected AuroraServer getAuroraServerMasterPreferred() throws SQLException {
     AuroraServer server = clusterMonitor.getCurrentMaster();
     if (server == null) {
       // we will _try_ to use a read only replica, since no master exists, lets hope this is a read
@@ -401,8 +413,8 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
     }
     return server;
   }
-  
-  protected AuroraServer getAuroraServerReplicaPrefered() throws SQLException {
+
+  protected AuroraServer getAuroraServerReplicaPreferred() throws SQLException {
     AuroraServer server = clusterMonitor.getRandomReadReplica();
     if (server == null) {
       server = clusterMonitor.getCurrentMaster();
@@ -596,25 +608,28 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
   public void setClientInfo(Properties properties) throws SQLClientInfoException {
     Object delegateChoice = properties.remove(CLIENT_INFO_NAME_DELEGATE_CHOICE);
     setDelegateChoice(delegateChoice == null ? null : delegateChoice.toString());
-    
+
     synchronized (connections) {
       for (ConnectionHolder ch : connections) {
         ch.uncheckedState().setClientInfo(properties);
       }
     }
   }
-  
+
+  @SuppressWarnings("deprecation")
   protected void setDelegateChoice(String choice) {
     if (StringUtils.isNullOrEmpty(choice)) {
       delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_DEFAULT;
     } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART.equals(choice)) {
       delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART;
-    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED.equals(choice)) {
-      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED.equals(choice) ||
+               CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED;
     } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY.equals(choice)) {
       delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_ONLY;
-    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED.equals(choice)) {
-      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED;
+    } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED.equals(choice) ||
+               CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED.equals(choice)) {
+      delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED;
     } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY.equals(choice)) {
       delegateChoice = CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_ONLY;
     } else if (CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_1_REPLICA_ONLY.equals(choice)) {

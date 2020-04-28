@@ -111,8 +111,8 @@ public class DriverLocalDbTest {
 
   @Test
   public void a1_insertRecordMasterPrefered() throws SQLClientInfoException {
-    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
-                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED);
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE,
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED);
     dao.insertRecord(StringUtils.makeRandomString(5));
   }
 
@@ -125,8 +125,8 @@ public class DriverLocalDbTest {
 
   @Test
   public void a1_insertRecordSlavePrefered() throws SQLClientInfoException {
-    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
-                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED);
+    h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE,
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED);
     dao.insertRecord(StringUtils.makeRandomString(5));
   }
 
