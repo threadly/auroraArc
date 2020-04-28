@@ -153,7 +153,8 @@ public class AuroraClusterMonitor {
           return null;
         } else {
           long replicaIndex = this.replicaIndex.getAndIncrement();
-          return clusterStateChecker.secondaryServers.get((int)(replicaIndex % secondaryCount));
+          return clusterStateChecker.secondaryServers.get(
+            (int)(replicaIndex & 0x7FFF_FFFF) % secondaryCount);
         }
       } catch (IndexOutOfBoundsException e) {
         // secondary server was removed during check, loop and retry
