@@ -123,12 +123,12 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
    */
   public static final String CLIENT_INFO_VALUE_DELEGATE_CHOICE_HALF_2_REPLICA_ONLY = "ReplicaPart2Only";
   /**
-   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to
+   * Possible value for {@link #CLIENT_INFO_NAME_DELEGATE_CHOICE} to 
    * {@link #setClientInfo(String, String)}.
    *
-   * <p> This value will try to pick a random server from the set that were marked "colocated" with
-   * the local process, without regard to whether any particular server is master or replica. If
-   * none are configured or none are available, behaves like
+   * <p> This value will try to pick a random server from the set that were marked "colocated" with 
+   * the local process, without regard to whether any particular server is master or replica. If 
+   * none are configured or none are available, behaves like 
    * {@link CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY}.
    *
    * @see PROPERTY_COLOCATED_SERVERS
@@ -138,17 +138,17 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
       CLIENT_INFO_VALUE_DELEGATE_CHOICE_SMART;
 
   /**
-   * Identifier for a connection property that can be set to inform AuroraArc which delegate servers
+   * Identifier for a connection property that can be set to inform AuroraArc which delegate servers 
    * are considered "colocated" with the local process.
    *
-   * <p>If set, the value should be a non-negative integer indicating the number of servers which
-   * are to be considered colocated. E.g., if a value of <em>n</em> is given, the servers at indices
+   * <p>If set, the value should be a non-negative integer indicating the number of servers which 
+   * are to be considered colocated. E.g., if a value of <em>n</em> is given, the servers at indices 
    * 0 through <em>n</em>-1 will be considered colocated with the local process.
    */
   public static final String PROPERTY_COLOCATED_SERVERS = "auroraArcColocatedServers";
 
   /**
-   * If this connection property is set to the value {@code true}, try to optimise state updates
+   * If this connection property is set to the value {@code true}, try to optimise state updates 
    * (such as transaction status) sent to the servers.
    */
   public static final String PROPERTY_OPTIMIZED_STATE_UPDATES = "optimizedStateUpdates";
