@@ -149,28 +149,28 @@ public class AuroraClusterMonitorClusterCheckerTest {
     assertEquals(1, testScheduler.advance(500));
     assertEquals(0, clusterChecker.pendingServerWeightUpdates.size());
 
-    assertEquals(2, clusterChecker.secondaryServers.size());
-    assertEquals(2, clusterChecker.weightedSecondaryServers.size());
+    assertEquals(2, clusterChecker.replicaServers.size());
+    assertEquals(2, clusterChecker.weightedReplicaServers.size());
   }
   
   @Test
   public void setOneReplicaWeightToZeroTest() {
-    assertEquals(2, clusterChecker.secondaryServers.size());
-    assertEquals(2, clusterChecker.weightedSecondaryServers.size());
+    assertEquals(2, clusterChecker.replicaServers.size());
+    assertEquals(2, clusterChecker.weightedReplicaServers.size());
 
     clusterChecker.queueReplicaWeightUpdate("host2", 3306, 0);
     assertEquals(1, clusterChecker.pendingServerWeightUpdates.size());
     assertEquals(1, testScheduler.advance(500));
     assertEquals(0, clusterChecker.pendingServerWeightUpdates.size());
     
-    assertEquals(2, clusterChecker.secondaryServers.size());
-    assertEquals(1, clusterChecker.weightedSecondaryServers.size());
+    assertEquals(2, clusterChecker.replicaServers.size());
+    assertEquals(1, clusterChecker.weightedReplicaServers.size());
   }
   
   @Test
   public void setAllReplicaWeightToZeroTest() {
-    assertEquals(2, clusterChecker.secondaryServers.size());
-    assertEquals(2, clusterChecker.weightedSecondaryServers.size());
+    assertEquals(2, clusterChecker.replicaServers.size());
+    assertEquals(2, clusterChecker.weightedReplicaServers.size());
 
     clusterChecker.queueReplicaWeightUpdate("host1", 3306, 0);
     clusterChecker.queueReplicaWeightUpdate("host2", 3306, 0);
@@ -178,24 +178,24 @@ public class AuroraClusterMonitorClusterCheckerTest {
     assertEquals(1, testScheduler.advance(500));
     assertEquals(0, clusterChecker.pendingServerWeightUpdates.size());
     
-    assertEquals(2, clusterChecker.secondaryServers.size());
-    assertEquals(0, clusterChecker.weightedSecondaryServers.size());
-    assertEquals(0, clusterChecker.secondaryServers.get(0).getWeight());
-    assertEquals(0, clusterChecker.secondaryServers.get(1).getWeight());
+    assertEquals(2, clusterChecker.replicaServers.size());
+    assertEquals(0, clusterChecker.weightedReplicaServers.size());
+    assertEquals(0, clusterChecker.replicaServers.get(0).getWeight());
+    assertEquals(0, clusterChecker.replicaServers.get(1).getWeight());
   }
   
   @Test
   public void doubleOneReplicaWeightTest() {
-    assertEquals(2, clusterChecker.secondaryServers.size());
-    assertEquals(2, clusterChecker.weightedSecondaryServers.size());
+    assertEquals(2, clusterChecker.replicaServers.size());
+    assertEquals(2, clusterChecker.weightedReplicaServers.size());
 
     clusterChecker.queueReplicaWeightUpdate("host1", 3306, 2);
     assertEquals(1, clusterChecker.pendingServerWeightUpdates.size());
     assertEquals(1, testScheduler.advance(500));
     assertEquals(0, clusterChecker.pendingServerWeightUpdates.size());
     
-    assertEquals(2, clusterChecker.secondaryServers.size());
-    assertEquals(3, clusterChecker.weightedSecondaryServers.size());
+    assertEquals(2, clusterChecker.replicaServers.size());
+    assertEquals(3, clusterChecker.weightedReplicaServers.size());
   }
   
   private static class TestServerMonitor extends ServerMonitor {

@@ -30,7 +30,7 @@ import org.threadly.util.ExceptionHandler;
 
 /**
  * Class which monitors a "cluster" of aurora servers.  It is expected that for each given cluster
- * there is exactly one master server, and zero or more secondary servers which can be used for
+ * there is exactly one master server, and zero or more replica servers which can be used for
  * reads.  This class will monitor those clusters, providing a monitor through
  * {@link AuroraClusterMonitor#getMonitor(DelegateAuroraDriver, AuroraServer[])}.
  * <p>
@@ -72,7 +72,7 @@ public class AuroraClusterMonitor {
         checkFrequencyMillis = millis;
         
         for (AuroraClusterMonitor acm : MONITORS.values()) {
-          acm.clusterStateChecker.updateServerCheckDelayMillis(millis);
+          acm.clusterChecker.updateServerCheckDelayMillis(millis);
         }
       }
     }
@@ -117,7 +117,7 @@ public class AuroraClusterMonitor {
     
     boolean updated = false;
     for (AuroraClusterMonitor acm : MONITORS.values()) {
-      updated |= acm.clusterStateChecker.queueReplicaWeightUpdate(host, port, weight);
+      updated |= acm.clusterChecker.queueReplicaWeightUpdate(host, port, weight);
     }
     if (! updated) {
       throw new IllegalStateException("Could not find server: " + host + ":" + port);
@@ -149,7 +149,7 @@ public class AuroraClusterMonitor {
                                                                     driver, mapKey.clusterServers));
   }
 
-  protected final ClusterChecker clusterStateChecker;
+  protected final ClusterChecker clusterChecker;
   private final AtomicLong replicaIndex;  // used to distribute replica reads
 
   protected AuroraClusterMonitor(SchedulerService scheduler, long checkIntervalMillis,
@@ -159,7 +159,7 @@ public class AuroraClusterMonitor {
 
   // used in testing
   protected AuroraClusterMonitor(ClusterChecker clusterChecker) {
-    this.clusterStateChecker = clusterChecker;
+    this.clusterChecker = clusterChecker;
     replicaIndex = new AtomicLong();
   }
   
@@ -170,7 +170,7 @@ public class AuroraClusterMonitor {
    * @return The number of healthy replica servers in the cluster
    */
   public int getHealthyReplicaCount() {
-    return clusterStateChecker.secondaryServers.size();
+    return clusterChecker.replicaServers.size();
   }
 
   /**
@@ -180,22 +180,22 @@ public class AuroraClusterMonitor {
    */
   public AuroraServer getRandomReadReplica() {
     while (true) {
-      int secondaryCount = clusterStateChecker.secondaryServers.size();
+      int replicaCount = clusterChecker.replicaServers.size();
       try {
-        if (secondaryCount == 1) {
-          return clusterStateChecker.secondaryServers.get(0);
-        } else if (secondaryCount == 0) {
+        if (replicaCount == 1) {
+          return clusterChecker.replicaServers.get(0);
+        } else if (replicaCount == 0) {
           return null;
-        } else if (clusterStateChecker.weightedSecondaryServers.isEmpty()) {
+        } else if (clusterChecker.weightedReplicaServers.isEmpty()) {
           // no weighted replica's, meaning all healthy replica's have a weight of 0, pick random zero weight
-          return clusterStateChecker.secondaryServers
-                     .get((int)(replicaIndex.getAndIncrement() % secondaryCount));
+          return clusterChecker.replicaServers
+                     .get((int)(replicaIndex.getAndIncrement() % replicaCount));
         } else {
-          return clusterStateChecker.weightedSecondaryServers
-                     .get((int)(replicaIndex.getAndIncrement() % clusterStateChecker.weightedSecondaryServers.size()));
+          return clusterChecker.weightedReplicaServers
+                     .get((int)(replicaIndex.getAndIncrement() % clusterChecker.weightedReplicaServers.size()));
         }
       } catch (IndexOutOfBoundsException e) {
-        // secondary server was removed during check, loop and retry
+        // replica server was removed during check, loop and retry
       }
     }
   }
@@ -210,13 +210,13 @@ public class AuroraClusterMonitor {
    * @return Read only replica server, or {@code null} if no servers was at the provided index
    */
   public AuroraServer getReadReplica(int index) {
-    if (clusterStateChecker.secondaryServers.size() <= index) {
+    if (clusterChecker.replicaServers.size() <= index) {
       return null;
     }
     try {
-      return clusterStateChecker.secondaryServers.get(index);
+      return clusterChecker.replicaServers.get(index);
     } catch (IndexOutOfBoundsException e) {
-      // secondary server was removed after check
+      // replica server was removed after check
       return null;
     }
   }
@@ -228,7 +228,7 @@ public class AuroraClusterMonitor {
    * @return Current writable server or {@code null} if no known one exists
    */
   public AuroraServer getCurrentMaster() {
-    return clusterStateChecker.masterServer.get();
+    return clusterChecker.masterServer.get();
   }
 
   /**
@@ -239,7 +239,7 @@ public class AuroraClusterMonitor {
    * @param auroraServer Server identifier to be checked
    */
   public void expediteServerCheck(AuroraServer auroraServer) {
-    clusterStateChecker.expediteServerCheck(auroraServer);
+    clusterChecker.expediteServerCheck(auroraServer);
   }
   
   /**
@@ -308,8 +308,8 @@ public class AuroraClusterMonitor {
   protected static class ClusterChecker extends ReschedulingOperation {
     protected final SchedulerService scheduler;
     protected final Map<AuroraServer, ServerMonitor> allServers;
-    protected final List<AuroraServer> secondaryServers;
-    protected volatile List<AuroraServer> weightedSecondaryServers; // reference replaced when updated
+    protected final List<AuroraServer> replicaServers;
+    protected volatile List<AuroraServer> weightedReplicaServers; // reference replaced when updated
     protected final AtomicReference<AuroraServer> masterServer;
     protected final CopyOnWriteArrayList<AuroraServer> serversWaitingExpeditiedCheck;
     protected final ConcurrentMap<AuroraServer, Integer> pendingServerWeightUpdates;
@@ -321,8 +321,8 @@ public class AuroraClusterMonitor {
 
       this.scheduler = scheduler;
       allServers = new HashMap<>();
-      secondaryServers = new CopyOnWriteArrayList<>();
-      weightedSecondaryServers = new ArrayList<>(clusterServers.length);
+      replicaServers = new CopyOnWriteArrayList<>();
+      weightedReplicaServers = new ArrayList<>(clusterServers.length);
       masterServer = new AtomicReference<>();
       serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
       pendingServerWeightUpdates = new ConcurrentHashMap<>();
@@ -337,12 +337,12 @@ public class AuroraClusterMonitor {
             if (monitor.isMasterServer()) {
               masterServer.set(server);
             } else {
-              secondaryServers.add(server);
+              replicaServers.add(server);
               
-              addWeightedServer(weightedSecondaryServers, server);
+              addWeightedServer(weightedReplicaServers, server);
             }
           }
-        } else {  // all other checks can be async, adding in as secondary servers as they complete
+        } else {  // all other checks can be async, adding in as replica servers as they complete
           scheduler.execute(monitor);
         }
 
@@ -368,7 +368,7 @@ public class AuroraClusterMonitor {
       for (AuroraServer as : allServers.keySet()) {
         if (as.matchHost(host, port)) {
           // replica weight is queued so that the cluster checking thread can be the only thread 
-          // which modifies both the weightedSecondaryServers collection and the weight in AuroraServer
+          // which modifies both the weightedReplicaServers collection and the weight in AuroraServer
           pendingServerWeightUpdates.put(as, weight);
           signalToRunImmediately(false);
           return true;
@@ -384,8 +384,8 @@ public class AuroraClusterMonitor {
 
       this.scheduler = scheduler;
       allServers = clusterServers;
-      secondaryServers = new CopyOnWriteArrayList<>();
-      weightedSecondaryServers = Collections.emptyList();
+      replicaServers = new CopyOnWriteArrayList<>();
+      weightedReplicaServers = Collections.emptyList();
       masterServer = new AtomicReference<>();
       serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
       pendingServerWeightUpdates = new ConcurrentHashMap<>();
@@ -446,8 +446,8 @@ public class AuroraClusterMonitor {
       }
     }
     
-    private static void addWeightedServer(List<AuroraServer> weightedSecondaryServers, AuroraServer as) {
-      int weightedCount = weightedSecondaryServers.size();
+    private static void addWeightedServer(List<AuroraServer> weightedReplicaServers, AuroraServer as) {
+      int weightedCount = weightedReplicaServers.size();
       ThreadLocalRandom random = null;
       for (int i = 0; i < as.getWeight(); i++) {
         // add one for each weight, choose an index that distributes the servers in the list
@@ -462,20 +462,20 @@ public class AuroraClusterMonitor {
           }
           index = random.nextInt(weightedCount);
         }
-        weightedSecondaryServers.add(index, as);
+        weightedReplicaServers.add(index, as);
         weightedCount++;
       }
     }
     
-    private static void removeWeightedServer(List<AuroraServer> weightedSecondaryServers, AuroraServer as) {
-      weightedSecondaryServers.removeIf(as::equals);
+    private static void removeWeightedServer(List<AuroraServer> weightedReplicaServers, AuroraServer as) {
+      weightedReplicaServers.removeIf(as::equals);
     }
     
-    private ArrayList<AuroraServer> copyWeightedSecondaryServers() {
-      ArrayList<AuroraServer> weightedSecondaryServersCopy = 
+    private ArrayList<AuroraServer> copyWeightedReplicaServers() {
+      ArrayList<AuroraServer> weightedReplicaServersCopy = 
           new ArrayList<>(64);  // sized to be larger than likely needed, but still cheap to allocate
-      weightedSecondaryServersCopy.addAll(weightedSecondaryServers);
-      return weightedSecondaryServersCopy;
+      weightedReplicaServersCopy.addAll(weightedReplicaServers);
+      return weightedReplicaServersCopy;
     }
 
     @Override
@@ -484,7 +484,7 @@ public class AuroraClusterMonitor {
         return; // ignore state updates still initialization is done
       }
       
-      ArrayList<AuroraServer> updatedWeightedSecondaryServers = null;
+      ArrayList<AuroraServer> updatedWeightedReplicaServers = null;
       if (! pendingServerWeightUpdates.isEmpty()) {
         Iterator<Map.Entry<AuroraServer, Integer>> it = pendingServerWeightUpdates.entrySet().iterator();
         do {
@@ -499,13 +499,13 @@ public class AuroraClusterMonitor {
           
           as.setWeight(weight); // set weight in AuroraServer instance
           
-          if (secondaryServers.contains(as)) {
+          if (replicaServers.contains(as)) {
             // update weighted list if server may be used
-            if (updatedWeightedSecondaryServers == null) {
-              updatedWeightedSecondaryServers = copyWeightedSecondaryServers();
+            if (updatedWeightedReplicaServers == null) {
+              updatedWeightedReplicaServers = copyWeightedReplicaServers();
             }
-            removeWeightedServer(updatedWeightedSecondaryServers, as);
-            addWeightedServer(updatedWeightedSecondaryServers, as);
+            removeWeightedServer(updatedWeightedReplicaServers, as);
+            addWeightedServer(updatedWeightedReplicaServers, as);
           }
         } while (it.hasNext());
       }
@@ -528,26 +528,26 @@ public class AuroraClusterMonitor {
               checkAllServers();  // make sure we find a new master ASAP
             }
             
-            if (! secondaryServers.contains(as)) {
-              secondaryServers.add(as);
+            if (! replicaServers.contains(as)) {
+              replicaServers.add(as);
 
               if (as.getWeight() > 0) {
-                if (updatedWeightedSecondaryServers == null) {
-                  updatedWeightedSecondaryServers = copyWeightedSecondaryServers();
+                if (updatedWeightedReplicaServers == null) {
+                  updatedWeightedReplicaServers = copyWeightedReplicaServers();
                 }
-                addWeightedServer(updatedWeightedSecondaryServers, as);
+                addWeightedServer(updatedWeightedReplicaServers, as);
               }
             }
           }
         } else {
-          if (secondaryServers.remove(as)) {
+          if (replicaServers.remove(as)) {
             if (as.getWeight() > 0) {
-              if (updatedWeightedSecondaryServers == null) {
-                updatedWeightedSecondaryServers = copyWeightedSecondaryServers();
+              if (updatedWeightedReplicaServers == null) {
+                updatedWeightedReplicaServers = copyWeightedReplicaServers();
               }
-              removeWeightedServer(updatedWeightedSecondaryServers, as);
+              removeWeightedServer(updatedWeightedReplicaServers, as);
             }
-            // TODO - removal of a secondary server can indicate it will become a new primary
+            // TODO - removal of a replica server can indicate it will become a new primary
             //        How can we use this common behavior to recover quicker?
           } else if (as.equals(masterServer.get())) {
             // no master till we find a new one
@@ -557,14 +557,14 @@ public class AuroraClusterMonitor {
         }
       }
       
-      if (updatedWeightedSecondaryServers != null) {
-        if (updatedWeightedSecondaryServers.isEmpty()) {
-          weightedSecondaryServers = Collections.emptyList();
-        } else if (updatedWeightedSecondaryServers.size() == 1) {
-          weightedSecondaryServers = Collections.singletonList(updatedWeightedSecondaryServers.get(0));
+      if (updatedWeightedReplicaServers != null) {
+        if (updatedWeightedReplicaServers.isEmpty()) {
+          weightedReplicaServers = Collections.emptyList();
+        } else if (updatedWeightedReplicaServers.size() == 1) {
+          weightedReplicaServers = Collections.singletonList(updatedWeightedReplicaServers.get(0));
         } else {
-          updatedWeightedSecondaryServers.trimToSize();
-          weightedSecondaryServers = updatedWeightedSecondaryServers;
+          updatedWeightedReplicaServers.trimToSize();
+          weightedReplicaServers = updatedWeightedReplicaServers;
         }
       }
     }

@@ -150,8 +150,8 @@ public class AuroraClusterMonitorJMH {
   @Group("updateCluster")
   public void weightedReplicaUpdate() {
     // clear servers so they can be re-added
-    WEIGHTED_CLUSTER_CHECKER.secondaryServers.clear();
-    WEIGHTED_CLUSTER_CHECKER.weightedSecondaryServers = Collections.emptyList();
+    WEIGHTED_CLUSTER_CHECKER.replicaServers.clear();
+    WEIGHTED_CLUSTER_CHECKER.weightedReplicaServers = Collections.emptyList();
     
     WEIGHTED_CLUSTER_CHECKER.run();
   }
@@ -160,8 +160,8 @@ public class AuroraClusterMonitorJMH {
   @Group("updateCluster")
   public void unweightedReplicaUpdate() {
     // clear servers so they can be re-added
-    UNWEIGHTED_CLUSTER_CHECKER.secondaryServers.clear();
-    UNWEIGHTED_CLUSTER_CHECKER.weightedSecondaryServers = Collections.emptyList();
+    UNWEIGHTED_CLUSTER_CHECKER.replicaServers.clear();
+    UNWEIGHTED_CLUSTER_CHECKER.weightedReplicaServers = Collections.emptyList();
     
     UNWEIGHTED_CLUSTER_CHECKER.run();
   }
@@ -170,8 +170,8 @@ public class AuroraClusterMonitorJMH {
   @Group("updateCluster")
   public void zeroWeightReplicaUpdate() {
     // clear servers so they can be re-added
-    ZEROWEIGHTED_CLUSTER_CHECKER.secondaryServers.clear();
-    ZEROWEIGHTED_CLUSTER_CHECKER.weightedSecondaryServers = Collections.emptyList();
+    ZEROWEIGHTED_CLUSTER_CHECKER.replicaServers.clear();
+    ZEROWEIGHTED_CLUSTER_CHECKER.weightedReplicaServers = Collections.emptyList();
     
     ZEROWEIGHTED_CLUSTER_CHECKER.run();
   }
