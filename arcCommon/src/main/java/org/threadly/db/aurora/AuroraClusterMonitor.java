@@ -2,12 +2,16 @@ package org.threadly.db.aurora;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -88,6 +92,37 @@ public class AuroraClusterMonitor {
     }
     errorExceptionHandler = handler;
   }
+  
+  /**
+   * Invoke to set the weight for a given replica.  This only impacts when a random replica is 
+   * requested, and wont impact the master server usage.  The weight must be between {@code 0} and 
+   * {@code 100} inclusive.  Ever server starts with a default weight of {@code 1}.  A weight of 
+   * {@code 0} indicates to not use the replica unless no other healthy replicas are available.  
+   * When a weight higher than the default of {@code 1} is used, it is in effect as if that server 
+   * was in the cluster multiple times.  For example a cluster with a server X of weight 1, and 
+   * server Y of weight 2, would send 2/3's of the requests to server Y.
+   * 
+   * @param host The host to update against
+   * @param port The port for the replica server
+   * @param weight The weight to apply to this replica
+   */
+  public static void setReplicaWeight(String host, int port, int weight) {
+    if (weight < 0) {
+      throw new IllegalArgumentException("Negative server weights not allowed");
+    } else if (weight > 100) {
+      throw new IllegalArgumentException("Maximum allowed weight is 100");
+    } else if (MONITORS.isEmpty()) {
+      throw new IllegalStateException("No aurora clusters monitored, make sure database is setup");
+    }
+    
+    boolean updated = false;
+    for (AuroraClusterMonitor acm : MONITORS.values()) {
+      updated |= acm.clusterStateChecker.queueReplicaWeightUpdate(host, port, weight);
+    }
+    if (! updated) {
+      throw new IllegalStateException("Could not find server: " + host + ":" + port);
+    }
+  }
 
   /**
    * Return a monitor instance for a given set of servers.  This instance will be consistent as
@@ -151,9 +186,13 @@ public class AuroraClusterMonitor {
           return clusterStateChecker.secondaryServers.get(0);
         } else if (secondaryCount == 0) {
           return null;
+        } else if (clusterStateChecker.weightedSecondaryServers.isEmpty()) {
+          // no weighted replica's, meaning all healthy replica's have a weight of 0, pick random zero weight
+          return clusterStateChecker.secondaryServers
+                     .get((int)(replicaIndex.getAndIncrement() % secondaryCount));
         } else {
-          long replicaIndex = this.replicaIndex.getAndIncrement();
-          return clusterStateChecker.secondaryServers.get((int)(replicaIndex % secondaryCount));
+          return clusterStateChecker.weightedSecondaryServers
+                     .get((int)(replicaIndex.getAndIncrement() % clusterStateChecker.weightedSecondaryServers.size()));
         }
       } catch (IndexOutOfBoundsException e) {
         // secondary server was removed during check, loop and retry
@@ -270,8 +309,10 @@ public class AuroraClusterMonitor {
     protected final SchedulerService scheduler;
     protected final Map<AuroraServer, ServerMonitor> allServers;
     protected final List<AuroraServer> secondaryServers;
+    protected volatile List<AuroraServer> weightedSecondaryServers; // reference replaced when updated
     protected final AtomicReference<AuroraServer> masterServer;
     protected final CopyOnWriteArrayList<AuroraServer> serversWaitingExpeditiedCheck;
+    protected final ConcurrentMap<AuroraServer, Integer> pendingServerWeightUpdates;
     private volatile boolean initialized = false; // starts false to avoid updates while constructor is running
 
     protected ClusterChecker(SchedulerService scheduler, long checkIntervalMillis,
@@ -281,8 +322,10 @@ public class AuroraClusterMonitor {
       this.scheduler = scheduler;
       allServers = new HashMap<>();
       secondaryServers = new CopyOnWriteArrayList<>();
-      serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
+      weightedSecondaryServers = new ArrayList<>(clusterServers.length);
       masterServer = new AtomicReference<>();
+      serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
+      pendingServerWeightUpdates = new ConcurrentHashMap<>();
 
       for (AuroraServer server : clusterServers) {
         ServerMonitor monitor = new ServerMonitor(scheduler, driver, server, this);
@@ -295,6 +338,8 @@ public class AuroraClusterMonitor {
               masterServer.set(server);
             } else {
               secondaryServers.add(server);
+              
+              addWeightedServer(weightedSecondaryServers, server);
             }
           }
         } else {  // all other checks can be async, adding in as secondary servers as they complete
@@ -311,6 +356,27 @@ public class AuroraClusterMonitor {
       signalToRun();
     }
 
+    /**
+     * Invoke to queue a replica weight update the next time the server state is checked.
+     * 
+     * @param host The host to update against
+     * @param port The port for the replica server
+     * @param weight The weight to apply to this replica
+     * @return {@code true} if a server was identified to queue the weight update against
+     */
+    public boolean queueReplicaWeightUpdate(String host, int port, int weight) {
+      for (AuroraServer as : allServers.keySet()) {
+        if (as.matchHost(host, port)) {
+          // replica weight is queued so that the cluster checking thread can be the only thread 
+          // which modifies both the weightedSecondaryServers collection and the weight in AuroraServer
+          pendingServerWeightUpdates.put(as, weight);
+          signalToRunImmediately(false);
+          return true;
+        }
+      }
+      return false;
+    }
+
     // used in testing
     protected ClusterChecker(SchedulerService scheduler, 
                              Map<AuroraServer, ServerMonitor> clusterServers) {
@@ -319,8 +385,10 @@ public class AuroraClusterMonitor {
       this.scheduler = scheduler;
       allServers = clusterServers;
       secondaryServers = new CopyOnWriteArrayList<>();
-      serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
+      weightedSecondaryServers = Collections.emptyList();
       masterServer = new AtomicReference<>();
+      serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
+      pendingServerWeightUpdates = new ConcurrentHashMap<>();
 
       initialized = true;
     }
@@ -377,42 +445,126 @@ public class AuroraClusterMonitor {
         expediteServerCheck(sm);
       }
     }
+    
+    private static void addWeightedServer(List<AuroraServer> weightedSecondaryServers, AuroraServer as) {
+      int weightedCount = weightedSecondaryServers.size();
+      ThreadLocalRandom random = null;
+      for (int i = 0; i < as.getWeight(); i++) {
+        // add one for each weight, choose an index that distributes the servers in the list
+        int index;
+        if (i == 0) { // first one goes at end for efficiency
+          index = weightedCount;
+        } else if (i == 1) { // place second one at farthest distance from first
+          index = weightedCount / 2;
+        } else { // after that just place randomly in the list
+          if (random == null) {
+            random = ThreadLocalRandom.current();
+          }
+          index = random.nextInt(weightedCount);
+        }
+        weightedSecondaryServers.add(index, as);
+        weightedCount++;
+      }
+    }
+    
+    private static void removeWeightedServer(List<AuroraServer> weightedSecondaryServers, AuroraServer as) {
+      weightedSecondaryServers.removeIf(as::equals);
+    }
+    
+    private ArrayList<AuroraServer> copyWeightedSecondaryServers() {
+      ArrayList<AuroraServer> weightedSecondaryServersCopy = 
+          new ArrayList<>(64);  // sized to be larger than likely needed, but still cheap to allocate
+      weightedSecondaryServersCopy.addAll(weightedSecondaryServers);
+      return weightedSecondaryServersCopy;
+    }
 
     @Override
     protected void run() {
       if (! initialized) {
-        // ignore state updates still initialization is done
-        return;
+        return; // ignore state updates still initialization is done
       }
       
-      for (Map.Entry<AuroraServer, ServerMonitor> p : allServers.entrySet()) {
-        if (p.getValue().isHealthy()) {
-          if (p.getValue().isMasterServer()) {
-            if (! p.getKey().equals(masterServer.get())) {
+      ArrayList<AuroraServer> updatedWeightedSecondaryServers = null;
+      if (! pendingServerWeightUpdates.isEmpty()) {
+        Iterator<Map.Entry<AuroraServer, Integer>> it = pendingServerWeightUpdates.entrySet().iterator();
+        do {
+          Map.Entry<AuroraServer, Integer> entry = it.next();
+          it.remove();
+          AuroraServer as = entry.getKey();
+          int weight = entry.getValue();
+          
+          if (weight == as.getWeight()) {
+            continue;
+          }
+          
+          as.setWeight(weight); // set weight in AuroraServer instance
+          
+          if (secondaryServers.contains(as)) {
+            // update weighted list if server may be used
+            if (updatedWeightedSecondaryServers == null) {
+              updatedWeightedSecondaryServers = copyWeightedSecondaryServers();
+            }
+            removeWeightedServer(updatedWeightedSecondaryServers, as);
+            addWeightedServer(updatedWeightedSecondaryServers, as);
+          }
+        } while (it.hasNext());
+      }
+      
+      for (Map.Entry<AuroraServer, ServerMonitor> entry : allServers.entrySet()) {
+        AuroraServer as = entry.getKey();
+        ServerMonitor monitor = entry.getValue();
+        
+        if (monitor.isHealthy()) {
+          if (monitor.isMasterServer()) {
+            if (! as.equals(masterServer.get())) {
               // either already was the master, or now is
-              masterServer.set(p.getKey());
-              LOG.info("New master server: " + p.getKey());
+              masterServer.set(as);
+              LOG.info("New master server: " + as);
             }
           } else {
-            if (p.getKey().equals(masterServer.get())) {
+            if (as.equals(masterServer.get())) {
               // no longer a master, will need to find the new one
-              masterServer.compareAndSet(p.getKey(), null);
+              masterServer.compareAndSet(as, null);
               checkAllServers();  // make sure we find a new master ASAP
             }
-            if (! secondaryServers.contains(p.getKey())) {
-              secondaryServers.add(p.getKey());
+            
+            if (! secondaryServers.contains(as)) {
+              secondaryServers.add(as);
+
+              if (as.getWeight() > 0) {
+                if (updatedWeightedSecondaryServers == null) {
+                  updatedWeightedSecondaryServers = copyWeightedSecondaryServers();
+                }
+                addWeightedServer(updatedWeightedSecondaryServers, as);
+              }
             }
           }
         } else {
-          if (secondaryServers.remove(p.getKey())) {
-            // was secondary, so done
+          if (secondaryServers.remove(as)) {
+            if (as.getWeight() > 0) {
+              if (updatedWeightedSecondaryServers == null) {
+                updatedWeightedSecondaryServers = copyWeightedSecondaryServers();
+              }
+              removeWeightedServer(updatedWeightedSecondaryServers, as);
+            }
             // TODO - removal of a secondary server can indicate it will become a new primary
             //        How can we use this common behavior to recover quicker?
-          } else if (p.getKey().equals(masterServer.get())) {
+          } else if (as.equals(masterServer.get())) {
             // no master till we find a new one
-            masterServer.compareAndSet(p.getKey(), null);
+            masterServer.compareAndSet(as, null);
             checkAllServers();  // make sure we find a new master ASAP
           } // else, server is already known to be unhealthy, no change
+        }
+      }
+      
+      if (updatedWeightedSecondaryServers != null) {
+        if (updatedWeightedSecondaryServers.isEmpty()) {
+          weightedSecondaryServers = Collections.emptyList();
+        } else if (updatedWeightedSecondaryServers.size() == 1) {
+          weightedSecondaryServers = Collections.singletonList(updatedWeightedSecondaryServers.get(0));
+        } else {
+          updatedWeightedSecondaryServers.trimToSize();
+          weightedSecondaryServers = updatedWeightedSecondaryServers;
         }
       }
     }

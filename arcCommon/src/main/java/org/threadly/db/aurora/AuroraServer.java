@@ -12,6 +12,7 @@ public class AuroraServer implements Comparable<AuroraServer> {
   private final int port;
   private final Properties info;
   private final int hashCode;
+  private int weight = 1;
 
   /**
    * Construct a new {@link AuroraServer} for a given {@code host:post} string.
@@ -48,13 +49,41 @@ public class AuroraServer implements Comparable<AuroraServer> {
     hashCode = this.host.hashCode() ^ port;
   }
   
+  protected void setWeight(int weight) {
+    this.weight = weight;
+  }
+  
+  protected int getWeight() {
+    return weight;
+  }
+  
   /**
    * Return the hostname for this server.
    * 
-   * @return Hostname for server instance
+   * @return Hostname for the server instance
    */
   public String getHost() {
     return host;
+  }
+  
+  /**
+   * Return the port for this server.
+   * 
+   * @return Port for the server instance
+   */
+  public int getPort() {
+    return port;
+  }
+  
+  /**
+   * Check if the host and port matches to this server.
+   * 
+   * @param host Network host which must match exactly
+   * @param port Server port used on host
+   * @return {@code true} if both host and port match exactly
+   */
+  public boolean matchHost(String host, int port) {
+    return this.host.equals(host) && this.port == port;
   }
 
   @Override
@@ -65,13 +94,8 @@ public class AuroraServer implements Comparable<AuroraServer> {
       AuroraServer as = (AuroraServer)o;
       /*if (hashCode != as.hashCode) {
         return false;
-      } else */if (! host.equals(as.host)) {
-        return false;
-      } else if (port != as.port) {
-        return false;
-      } else {
-        return true;
-      }
+      }*/
+      return matchHost(as.host, as.port);
     } else {
       return false;
     }

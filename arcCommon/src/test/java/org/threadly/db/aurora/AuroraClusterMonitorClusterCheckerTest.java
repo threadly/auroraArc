@@ -54,6 +54,7 @@ public class AuroraClusterMonitorClusterCheckerTest {
     for (ServerMonitor sm : clusterServers.values()) {
       ((TestServerMonitor)sm).resetState();
     }
+    clusterChecker.run();
   }
   
   @After
@@ -139,6 +140,62 @@ public class AuroraClusterMonitorClusterCheckerTest {
     for (ServerMonitor sm : clusterServers.values()) {
       assertFalse(sm.isHealthy()); // NPE should have made unhealthy
     }
+  }
+  
+  @Test
+  public void ignoreSetReplicaWeightToOneTest() {
+    clusterChecker.queueReplicaWeightUpdate("host1", 3306, 1);
+    assertEquals(1, clusterChecker.pendingServerWeightUpdates.size());
+    assertEquals(1, testScheduler.advance(500));
+    assertEquals(0, clusterChecker.pendingServerWeightUpdates.size());
+
+    assertEquals(2, clusterChecker.secondaryServers.size());
+    assertEquals(2, clusterChecker.weightedSecondaryServers.size());
+  }
+  
+  @Test
+  public void setOneReplicaWeightToZeroTest() {
+    assertEquals(2, clusterChecker.secondaryServers.size());
+    assertEquals(2, clusterChecker.weightedSecondaryServers.size());
+
+    clusterChecker.queueReplicaWeightUpdate("host2", 3306, 0);
+    assertEquals(1, clusterChecker.pendingServerWeightUpdates.size());
+    assertEquals(1, testScheduler.advance(500));
+    assertEquals(0, clusterChecker.pendingServerWeightUpdates.size());
+    
+    assertEquals(2, clusterChecker.secondaryServers.size());
+    assertEquals(1, clusterChecker.weightedSecondaryServers.size());
+  }
+  
+  @Test
+  public void setAllReplicaWeightToZeroTest() {
+    assertEquals(2, clusterChecker.secondaryServers.size());
+    assertEquals(2, clusterChecker.weightedSecondaryServers.size());
+
+    clusterChecker.queueReplicaWeightUpdate("host1", 3306, 0);
+    clusterChecker.queueReplicaWeightUpdate("host2", 3306, 0);
+    assertEquals(2, clusterChecker.pendingServerWeightUpdates.size());
+    assertEquals(1, testScheduler.advance(500));
+    assertEquals(0, clusterChecker.pendingServerWeightUpdates.size());
+    
+    assertEquals(2, clusterChecker.secondaryServers.size());
+    assertEquals(0, clusterChecker.weightedSecondaryServers.size());
+    assertEquals(0, clusterChecker.secondaryServers.get(0).getWeight());
+    assertEquals(0, clusterChecker.secondaryServers.get(1).getWeight());
+  }
+  
+  @Test
+  public void doubleOneReplicaWeightTest() {
+    assertEquals(2, clusterChecker.secondaryServers.size());
+    assertEquals(2, clusterChecker.weightedSecondaryServers.size());
+
+    clusterChecker.queueReplicaWeightUpdate("host1", 3306, 2);
+    assertEquals(1, clusterChecker.pendingServerWeightUpdates.size());
+    assertEquals(1, testScheduler.advance(500));
+    assertEquals(0, clusterChecker.pendingServerWeightUpdates.size());
+    
+    assertEquals(2, clusterChecker.secondaryServers.size());
+    assertEquals(3, clusterChecker.weightedSecondaryServers.size());
   }
   
   private static class TestServerMonitor extends ServerMonitor {
