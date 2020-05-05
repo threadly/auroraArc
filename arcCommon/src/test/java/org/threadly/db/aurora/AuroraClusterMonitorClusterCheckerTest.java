@@ -14,6 +14,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.threadly.concurrent.ReschedulingOperation;
 import org.threadly.concurrent.SubmitterScheduler;
+import org.threadly.db.aurora.AuroraClusterMonitor.AuroraClusterStateListener;
 import org.threadly.db.aurora.AuroraClusterMonitor.ClusterChecker;
 import org.threadly.db.aurora.AuroraClusterMonitor.ServerMonitor;
 import org.threadly.test.concurrent.TestableScheduler;
@@ -139,6 +140,18 @@ public class AuroraClusterMonitorClusterCheckerTest {
 
     for (ServerMonitor sm : clusterServers.values()) {
       assertFalse(sm.isHealthy()); // NPE should have made unhealthy
+    }
+  }
+  
+  @Test
+  public void listenerStateInitializedOnNextCheckTest() {
+    AuroraClusterStateListener mockListener = mock(AuroraClusterStateListener.class);
+    
+    clusterChecker.setClusterStateListener(mockListener);
+    assertEquals(1, testScheduler.advance(500));
+    
+    for (AuroraServer as : clusterServers.keySet()) {
+      verify(mockListener, times(1)).newReplica(eq(as));
     }
   }
   

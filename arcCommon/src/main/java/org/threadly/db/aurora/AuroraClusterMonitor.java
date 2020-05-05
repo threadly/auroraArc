@@ -3,6 +3,7 @@ package org.threadly.db.aurora;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -88,9 +89,41 @@ public class AuroraClusterMonitor {
    */
   public static void setExceptionHandler(BiConsumer<AuroraServer, Throwable> handler) {
     if (handler == null) {
-      handler = (server, error) -> { /* ignored */ };
+      errorExceptionHandler = (server, error) -> { /* ignored */ };
+    } else {
+      errorExceptionHandler = handler;
     }
-    errorExceptionHandler = handler;
+  }
+  
+  /**
+   * Set a {@link AuroraClusterStateListener} to be invoked to provide status updates on cluster 
+   * state changes.  See the interface definition for details about each action.  It's critical 
+   * that no invocation of this listener blocks as it could block the cluster check thread.
+   * <p>
+   * After being set, on the next cluster check the listener will be invoked with 
+   * {@link AuroraClusterStateListener#newWriter(AuroraServer)} and 
+   * {@link AuroraClusterStateListener#newReplica(AuroraServer)} as appropriate to initialize the 
+   * current cluster state.
+   * <p>
+   * If the cluster is unable to be looked up an error will be thrown, thus it is important that 
+   * the database has been initialized before invoking this.
+   * 
+   * @param Collection of the aurora hosts which describe the cluster, should include `:port` suffixes
+   * @param listener Listener to be invoked on cluster state checks
+   */
+  public static void setClusterStateListener(Collection<String> clusterHosts, 
+                                             AuroraClusterStateListener listener) {
+    AuroraServer[] aServers = new AuroraServer[clusterHosts.size()];
+    int index = 0;
+    for (String host : clusterHosts) {
+      aServers[index++] = new AuroraServer(host, null);
+    }
+    
+    AuroraClusterMonitor clusterMonitor = MONITORS.get(new AuroraServersKey(aServers));
+    if (clusterMonitor == null) {
+      throw new RuntimeException("Could not find cluster, make sure it's running: " + clusterHosts);
+    }
+    clusterMonitor.clusterChecker.setClusterStateListener(listener);
   }
   
   /**
@@ -147,6 +180,70 @@ public class AuroraClusterMonitor {
                                     (s) -> new AuroraClusterMonitor(MONITOR_SCHEDULER,
                                                                     checkFrequencyMillis, 
                                                                     driver, mapKey.clusterServers));
+  }
+  
+  /**
+   * Listener invoked on Aurora cluster state changes.  It is critical that not invocations block 
+   * as it could impact monitoring the health of the cluster.
+   * 
+   * @since 0.14
+   */
+  public interface AuroraClusterStateListener {
+    /**
+     * Listener which ignores all invocations.
+     */
+    public AuroraClusterStateListener IGNORE_LISTENER = new AuroraClusterStateListener() {
+      @Override
+      public void newWriter(AuroraServer newMaster) { /* ignored */ }
+
+      @Override
+      public void unhealthyWriter(AuroraServer formerMaster) { /* ignored */ }
+
+      @Override
+      public void newReplica(AuroraServer newReplica) { /* ignored */ }
+
+      @Override
+      public void unhealthyReplica(AuroraServer formerReplica) { /* ignored */ }
+
+      @Override
+      public void clusterCheckComplete() { /* ignored */ }
+    };
+    
+    /**
+     * Invoked when a new server has become a writer.
+     * 
+     * @param newMaster Server which is now the cluster master
+     */
+    public void newWriter(AuroraServer newMaster);
+    
+    /**
+     * Invoked when a former master (notified through {@link #newWriter(AuroraServer)}) has become 
+     * unhealthy.
+     * 
+     * @param formerMaster Server which is no longer a writer
+     */
+    public void unhealthyWriter(AuroraServer formerMaster);
+    
+    /**
+     * Invoked when a replica server has joined the cluster.
+     * 
+     * @param newReplica Server which can be used as a replica
+     */
+    public void newReplica(AuroraServer newReplica);
+
+    /**
+     * Invoked when a former replica (notified through {@link #newReplica(AuroraServer)} has become 
+     * unhealthy.
+     * 
+     * @param formerReplica Server which is no longer a replica
+     */
+    public void unhealthyReplica(AuroraServer formerReplica);
+
+    /**
+     * Invoked at the completion of every cluster check.  This can be used to monitor the cluster 
+     * checker health, as well as commit pending cluster changes from other calls.
+     */
+    public void clusterCheckComplete();
   }
 
   protected final ClusterChecker clusterChecker;
@@ -313,6 +410,8 @@ public class AuroraClusterMonitor {
     protected final AtomicReference<AuroraServer> masterServer;
     protected final CopyOnWriteArrayList<AuroraServer> serversWaitingExpeditiedCheck;
     protected final ConcurrentMap<AuroraServer, Integer> pendingServerWeightUpdates;
+    private AuroraClusterStateListener clusterStateListener;
+    private volatile AuroraClusterStateListener replacementClusterStateListener = null;
     private volatile boolean initialized = false; // starts false to avoid updates while constructor is running
 
     protected ClusterChecker(SchedulerService scheduler, long checkIntervalMillis,
@@ -326,6 +425,7 @@ public class AuroraClusterMonitor {
       masterServer = new AtomicReference<>();
       serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
       pendingServerWeightUpdates = new ConcurrentHashMap<>();
+      clusterStateListener = AuroraClusterStateListener.IGNORE_LISTENER;
 
       for (AuroraServer server : clusterServers) {
         ServerMonitor monitor = new ServerMonitor(scheduler, driver, server, this);
@@ -353,6 +453,16 @@ public class AuroraClusterMonitor {
       }
       
       initialized = true;
+      signalToRun();
+    }
+    
+    public void setClusterStateListener(AuroraClusterStateListener listener) {
+      // set replacementClusterStateListener so that listener can be updated only on the cluster check thread
+      if (listener == null) {
+        replacementClusterStateListener = AuroraClusterStateListener.IGNORE_LISTENER;
+      } else {
+        replacementClusterStateListener = listener;
+      }
       signalToRun();
     }
 
@@ -389,6 +499,7 @@ public class AuroraClusterMonitor {
       masterServer = new AtomicReference<>();
       serversWaitingExpeditiedCheck = new CopyOnWriteArrayList<>();
       pendingServerWeightUpdates = new ConcurrentHashMap<>();
+      clusterStateListener = AuroraClusterStateListener.IGNORE_LISTENER;
 
       initialized = true;
     }
@@ -484,6 +595,18 @@ public class AuroraClusterMonitor {
         return; // ignore state updates still initialization is done
       }
       
+      if (replacementClusterStateListener != null) {
+        clusterStateListener = replacementClusterStateListener;
+        replacementClusterStateListener = null;
+        
+        // invoke with the current cluster state
+        AuroraServer as = masterServer.get();
+        if (as != null) {
+          clusterStateListener.newWriter(as);
+        }
+        replicaServers.forEach(clusterStateListener::newReplica);
+      }
+      
       ArrayList<AuroraServer> updatedWeightedReplicaServers = null;
       if (! pendingServerWeightUpdates.isEmpty()) {
         Iterator<Map.Entry<AuroraServer, Integer>> it = pendingServerWeightUpdates.entrySet().iterator();
@@ -519,6 +642,8 @@ public class AuroraClusterMonitor {
             if (! as.equals(masterServer.get())) {
               // either already was the master, or now is
               masterServer.set(as);
+              
+              clusterStateListener.newWriter(as);
               LOG.info("New master server: " + as);
             }
           } else {
@@ -526,6 +651,9 @@ public class AuroraClusterMonitor {
               // no longer a master, will need to find the new one
               masterServer.compareAndSet(as, null);
               checkAllServers();  // make sure we find a new master ASAP
+              
+              clusterStateListener.unhealthyWriter(as);
+              clusterStateListener.newReplica(as);
             }
             
             if (! replicaServers.contains(as)) {
@@ -537,6 +665,8 @@ public class AuroraClusterMonitor {
                 }
                 addWeightedServer(updatedWeightedReplicaServers, as);
               }
+              
+              clusterStateListener.newReplica(as);
             }
           }
         } else {
@@ -547,12 +677,16 @@ public class AuroraClusterMonitor {
               }
               removeWeightedServer(updatedWeightedReplicaServers, as);
             }
+            
+            clusterStateListener.unhealthyReplica(as);
             // TODO - removal of a replica server can indicate it will become a new primary
             //        How can we use this common behavior to recover quicker?
           } else if (as.equals(masterServer.get())) {
             // no master till we find a new one
             masterServer.compareAndSet(as, null);
             checkAllServers();  // make sure we find a new master ASAP
+            
+            clusterStateListener.unhealthyWriter(as);
           } // else, server is already known to be unhealthy, no change
         }
       }
@@ -567,6 +701,8 @@ public class AuroraClusterMonitor {
           weightedReplicaServers = updatedWeightedReplicaServers;
         }
       }
+      
+      clusterStateListener.clusterCheckComplete();
     }
   }
 
