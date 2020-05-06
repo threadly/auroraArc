@@ -199,6 +199,40 @@ public class AuroraClusterMonitor {
       }
     }
   }
+
+  /**
+   * Returns a random server, including the master server which is weighted in against the replicas.
+   * 
+   * @return Random server or {@code null} if there are no healthy servers
+   */
+  public AuroraServer getRandomAnyServer() {
+    while (true) {
+      int weightedServerCount = clusterChecker.weightedAllServers.size();
+      try {
+        if (weightedServerCount == 1) {
+          return clusterChecker.weightedAllServers.get(0);
+        } else if (weightedServerCount > 0) {
+          return clusterChecker.weightedAllServers
+              .get((int)(replicaIndex.getAndIncrement() % weightedServerCount));
+        } else {
+          // no healthy weighted server, try to find any server to use
+          int secondaryCount = clusterChecker.replicaServers.size();
+          if (secondaryCount == 0) {
+            return getCurrentMaster();
+          } else if (ThreadLocalRandom.current().nextInt(secondaryCount + 1) == 0) {
+            AuroraServer server = getCurrentMaster();
+            if (server != null) {
+              return server;
+            } // else, defer to secondary lookup directly below
+          }
+          return clusterChecker.replicaServers
+                               .get((int)(replicaIndex.getAndIncrement() % secondaryCount));
+        }
+      } catch (IndexOutOfBoundsException e) {
+        // replica server was removed during check, loop and retry
+      }
+    }
+  }
   
   /**
    * Return a read replica which corresponds to an index.  A given index may not always provide the 
@@ -308,6 +342,7 @@ public class AuroraClusterMonitor {
   protected static class ClusterChecker extends ReschedulingOperation {
     protected final SchedulerService scheduler;
     protected final Map<AuroraServer, ServerMonitor> allServers;
+    protected volatile List<AuroraServer> weightedAllServers; // reference replaced when updated
     protected final List<AuroraServer> replicaServers;
     protected volatile List<AuroraServer> weightedReplicaServers; // reference replaced when updated
     protected final AtomicReference<AuroraServer> masterServer;
@@ -321,6 +356,7 @@ public class AuroraClusterMonitor {
 
       this.scheduler = scheduler;
       allServers = new HashMap<>();
+      weightedAllServers = new ArrayList<>(clusterServers.length);
       replicaServers = new CopyOnWriteArrayList<>();
       weightedReplicaServers = new ArrayList<>(clusterServers.length);
       masterServer = new AtomicReference<>();
@@ -336,9 +372,12 @@ public class AuroraClusterMonitor {
           if (monitor.isHealthy()) {
             if (monitor.isMasterServer()) {
               masterServer.set(server);
+              
+              addWeightedServer(weightedAllServers, server);
             } else {
               replicaServers.add(server);
               
+              addWeightedServer(weightedAllServers, server);
               addWeightedServer(weightedReplicaServers, server);
             }
           }
@@ -384,6 +423,7 @@ public class AuroraClusterMonitor {
 
       this.scheduler = scheduler;
       allServers = clusterServers;
+      weightedAllServers = Collections.emptyList();
       replicaServers = new CopyOnWriteArrayList<>();
       weightedReplicaServers = Collections.emptyList();
       masterServer = new AtomicReference<>();
@@ -446,8 +486,8 @@ public class AuroraClusterMonitor {
       }
     }
     
-    private static void addWeightedServer(List<AuroraServer> weightedReplicaServers, AuroraServer as) {
-      int weightedCount = weightedReplicaServers.size();
+    private static void addWeightedServer(List<AuroraServer> weightedServers, AuroraServer as) {
+      int weightedCount = weightedServers.size();
       ThreadLocalRandom random = null;
       for (int i = 0; i < as.getWeight(); i++) {
         // add one for each weight, choose an index that distributes the servers in the list
@@ -462,7 +502,7 @@ public class AuroraClusterMonitor {
           }
           index = random.nextInt(weightedCount);
         }
-        weightedReplicaServers.add(index, as);
+        weightedServers.add(index, as);
         weightedCount++;
       }
     }
@@ -471,11 +511,22 @@ public class AuroraClusterMonitor {
       weightedReplicaServers.removeIf(as::equals);
     }
     
-    private ArrayList<AuroraServer> copyWeightedReplicaServers() {
-      ArrayList<AuroraServer> weightedReplicaServersCopy = 
+    private static ArrayList<AuroraServer> copyForModifyServerList(List<AuroraServer> sourceServers) {
+      ArrayList<AuroraServer> copyServers = 
           new ArrayList<>(64);  // sized to be larger than likely needed, but still cheap to allocate
-      weightedReplicaServersCopy.addAll(weightedReplicaServers);
-      return weightedReplicaServersCopy;
+      copyServers.addAll(sourceServers);
+      return copyServers;
+    }
+    
+    private static List<AuroraServer> optimizeServerListForRetain(ArrayList<AuroraServer> servers) {
+      if (servers.isEmpty()) {
+        return Collections.emptyList();
+      } else if (servers.size() == 1) {
+        return Collections.singletonList(servers.get(0));
+      } else {
+        servers.trimToSize();
+        return servers;
+      }
     }
 
     @Override
@@ -483,7 +534,8 @@ public class AuroraClusterMonitor {
       if (! initialized) {
         return; // ignore state updates still initialization is done
       }
-      
+
+      ArrayList<AuroraServer> updatedWeightedAllServers = null;
       ArrayList<AuroraServer> updatedWeightedReplicaServers = null;
       if (! pendingServerWeightUpdates.isEmpty()) {
         Iterator<Map.Entry<AuroraServer, Integer>> it = pendingServerWeightUpdates.entrySet().iterator();
@@ -502,9 +554,12 @@ public class AuroraClusterMonitor {
           if (replicaServers.contains(as)) {
             // update weighted list if server may be used
             if (updatedWeightedReplicaServers == null) {
-              updatedWeightedReplicaServers = copyWeightedReplicaServers();
+              updatedWeightedAllServers = copyForModifyServerList(weightedAllServers);
+              updatedWeightedReplicaServers = copyForModifyServerList(weightedReplicaServers);
             }
+            removeWeightedServer(updatedWeightedAllServers, as);
             removeWeightedServer(updatedWeightedReplicaServers, as);
+            addWeightedServer(updatedWeightedAllServers, as);
             addWeightedServer(updatedWeightedReplicaServers, as);
           }
         } while (it.hasNext());
@@ -519,10 +574,29 @@ public class AuroraClusterMonitor {
             if (! as.equals(masterServer.get())) {
               // either already was the master, or now is
               masterServer.set(as);
+              
+              if (replicaServers.remove(as)) {  // verify server was not previously a replica
+                if (as.getWeight() > 0) {
+                  if (updatedWeightedReplicaServers == null) {
+                    updatedWeightedReplicaServers = copyForModifyServerList(weightedReplicaServers);
+                  }
+                  removeWeightedServer(updatedWeightedReplicaServers, as);
+                }
+              } else {  // new master, so include in all servers weighted list
+                if (as.getWeight() > 0) {
+                  if (updatedWeightedAllServers == null) {
+                    updatedWeightedAllServers = copyForModifyServerList(weightedAllServers);
+                  }
+                  addWeightedServer(updatedWeightedAllServers, as);
+                }
+              }
               LOG.info("New master server: " + as);
+              // TODO - removal of a replica server can indicate it will become a new primary
+              //        How can we use this common behavior to recover quicker?
             }
           } else {
-            if (as.equals(masterServer.get())) {
+            boolean wasMaster = as.equals(masterServer.get());
+            if (wasMaster) {
               // no longer a master, will need to find the new one
               masterServer.compareAndSet(as, null);
               checkAllServers();  // make sure we find a new master ASAP
@@ -532,8 +606,14 @@ public class AuroraClusterMonitor {
               replicaServers.add(as);
 
               if (as.getWeight() > 0) {
+                if (! wasMaster) {
+                  if (updatedWeightedAllServers == null) {
+                    updatedWeightedAllServers = copyForModifyServerList(weightedAllServers);
+                  }
+                  addWeightedServer(updatedWeightedAllServers, as);
+                }
                 if (updatedWeightedReplicaServers == null) {
-                  updatedWeightedReplicaServers = copyWeightedReplicaServers();
+                  updatedWeightedReplicaServers = copyForModifyServerList(weightedReplicaServers);
                 }
                 addWeightedServer(updatedWeightedReplicaServers, as);
               }
@@ -542,9 +622,13 @@ public class AuroraClusterMonitor {
         } else {
           if (replicaServers.remove(as)) {
             if (as.getWeight() > 0) {
-              if (updatedWeightedReplicaServers == null) {
-                updatedWeightedReplicaServers = copyWeightedReplicaServers();
+              if (updatedWeightedAllServers == null) {
+                updatedWeightedAllServers = copyForModifyServerList(weightedAllServers);
               }
+              if (updatedWeightedReplicaServers == null) {
+                updatedWeightedReplicaServers = copyForModifyServerList(weightedReplicaServers);
+              }
+              removeWeightedServer(updatedWeightedAllServers, as);
               removeWeightedServer(updatedWeightedReplicaServers, as);
             }
             // TODO - removal of a replica server can indicate it will become a new primary
@@ -552,20 +636,22 @@ public class AuroraClusterMonitor {
           } else if (as.equals(masterServer.get())) {
             // no master till we find a new one
             masterServer.compareAndSet(as, null);
+
+            if (updatedWeightedAllServers == null) {
+              updatedWeightedAllServers = copyForModifyServerList(weightedAllServers);
+            }
+            removeWeightedServer(updatedWeightedAllServers, as);
+            
             checkAllServers();  // make sure we find a new master ASAP
           } // else, server is already known to be unhealthy, no change
         }
       }
       
+      if (updatedWeightedAllServers != null) {
+        weightedAllServers = optimizeServerListForRetain(updatedWeightedAllServers);
+      }
       if (updatedWeightedReplicaServers != null) {
-        if (updatedWeightedReplicaServers.isEmpty()) {
-          weightedReplicaServers = Collections.emptyList();
-        } else if (updatedWeightedReplicaServers.size() == 1) {
-          weightedReplicaServers = Collections.singletonList(updatedWeightedReplicaServers.get(0));
-        } else {
-          updatedWeightedReplicaServers.trimToSize();
-          weightedReplicaServers = updatedWeightedReplicaServers;
-        }
+        weightedReplicaServers = optimizeServerListForRetain(updatedWeightedReplicaServers);
       }
     }
   }

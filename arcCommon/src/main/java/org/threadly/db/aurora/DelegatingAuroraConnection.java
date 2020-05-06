@@ -455,19 +455,7 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
   }
   
   protected AuroraServer getAuroraServerAny() throws SQLException {
-    int secondaryCount = clusterMonitor.getHealthyReplicaCount();
-    AuroraServer server;
-    if (secondaryCount == 0 || ThreadLocalRandom.current().nextInt(secondaryCount + 1) == 0) {
-      server = clusterMonitor.getCurrentMaster();
-      if (server == null) {
-        server = clusterMonitor.getRandomReadReplica(); // retry with secondary
-      }
-    } else {
-      server = clusterMonitor.getRandomReadReplica();
-      if (server == null) {
-        server = clusterMonitor.getCurrentMaster(); // retry with master
-      }
-    }
+    AuroraServer server = clusterMonitor.getRandomAnyServer();
     if (server == null) {
       throw new NoAuroraServerException("No healthy servers");
     }
