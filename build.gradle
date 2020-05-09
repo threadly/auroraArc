@@ -15,7 +15,7 @@ subprojects {
   }
 
   compileTestJava {
-    options.compilerArgs << "-Xlint:all" << "-Werror"
+    options.compilerArgs << "-Xlint:all" << "-Xlint:-processing" << "-Werror"
   }
 
   plugins.withType(JavaPlugin) {
@@ -94,12 +94,15 @@ project(':arcCommon') {
       "org.threadly:threadly-test:$threadlyTestVersion",
       "junit:junit:$junitVersion",
       "org.mockito:mockito-core:$mockitoVersion",
+      "org.openjdk.jmh:jmh-core:$jmhVersion",
+      "org.openjdk.jmh:jmh-generator-annprocess:$jmhVersion",
       "org.jdbi:jdbi3-core:$jdbiVersion",
       "org.jdbi:jdbi3-sqlobject:$jdbiVersion",
       "com.zaxxer:HikariCP:$hikariVersion",
       "ch.qos.logback:logback-core:$logbackVersion",
       "ch.qos.logback:logback-classic:$logbackVersion"
     )
+    testAnnotationProcessor "org.openjdk.jmh:jmh-generator-annprocess:$jmhVersion"
 
     implementation (
       "org.threadly:threadly:$threadlyVersion"
