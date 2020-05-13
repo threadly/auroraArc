@@ -110,9 +110,9 @@ public class DriverLocalDbTest {
   }
 
   @Test
-  public void a1_insertRecordMasterPrefered() throws SQLClientInfoException {
+  public void a1_insertRecordMasterPreferred() throws SQLClientInfoException {
     h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
-                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED);
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED);
     dao.insertRecord(StringUtils.makeRandomString(5));
   }
 
@@ -124,9 +124,9 @@ public class DriverLocalDbTest {
   }
 
   @Test
-  public void a1_insertRecordSlavePrefered() throws SQLClientInfoException {
+  public void a1_insertRecordSlavePreferred() throws SQLClientInfoException {
     h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
-                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED);
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED);
     dao.insertRecord(StringUtils.makeRandomString(5));
   }
 
@@ -182,9 +182,9 @@ public class DriverLocalDbTest {
   }
 
   @Test
-  public void a3_lookupSingleRecordMasterPrefered() throws SQLClientInfoException {
+  public void a3_lookupSingleRecordMasterPreferred() throws SQLClientInfoException {
     h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
-                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERED);
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_MASTER_PREFERRED);
     Pair<Long, String> p = dao.lookupRecord(1);
     assertNotNull(p);
   }
@@ -198,9 +198,9 @@ public class DriverLocalDbTest {
   }
 
   @Test
-  public void a3_lookupSingleRecordSlavePrefered() throws SQLClientInfoException {
+  public void a3_lookupSingleRecordSlavePreferred() throws SQLClientInfoException {
     h.getConnection().setClientInfo(DelegatingAuroraConnection.CLIENT_INFO_NAME_DELEGATE_CHOICE, 
-                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERED);
+                                    DelegatingAuroraConnection.CLIENT_INFO_VALUE_DELEGATE_CHOICE_ANY_REPLICA_PREFERRED);
     Pair<Long, String> p = dao.lookupRecord(1);
     assertNotNull(p);
   }
