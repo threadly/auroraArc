@@ -13,13 +13,13 @@ public class AuroraClusterMonitorTest {
   
   @Test (expected = IllegalArgumentException.class)
   public void setReplicaWeightNegativeFail() {
-    AuroraClusterMonitor.setReplicaWeight("host", 3360, -1);
+    AuroraClusterMonitor.setHostWeight("host", 3360, -1);
     fail("Exception expected");
   }
   
   @Test (expected = IllegalArgumentException.class)
   public void setReplicaWeightMaxFail() {
-    AuroraClusterMonitor.setReplicaWeight("host", 3360, 101);
+    AuroraClusterMonitor.setHostWeight("host", 3360, 101);
     fail("Exception expected");
   }
 }

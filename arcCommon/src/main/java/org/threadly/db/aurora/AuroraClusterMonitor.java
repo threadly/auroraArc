@@ -94,7 +94,7 @@ public class AuroraClusterMonitor {
   }
   
   /**
-   * Invoke to set the weight for a given replica.  This only impacts when a random replica is 
+   * Invoke to set the weight for a given server.  This only impacts when a random replica is 
    * requested, and wont impact the master server usage.  The weight must be between {@code 0} and 
    * {@code 100} inclusive.  Ever server starts with a default weight of {@code 1}.  A weight of 
    * {@code 0} indicates to not use the replica unless no other healthy replicas are available.  
@@ -106,7 +106,7 @@ public class AuroraClusterMonitor {
    * @param port The port for the replica server
    * @param weight The weight to apply to this replica
    */
-  public static void setReplicaWeight(String host, int port, int weight) {
+  public static void setHostWeight(String host, int port, int weight) {
     if (weight < 0) {
       throw new IllegalArgumentException("Negative server weights not allowed");
     } else if (weight > 100) {
