@@ -45,6 +45,8 @@ public class AuroraClusterMonitor {
   protected static final int MAXIMUM_THREAD_POOL_SIZE = 64;
   protected static final SchedulerService MONITOR_SCHEDULER;
   protected static final ConcurrentMap<AuroraServersKey, AuroraClusterMonitor> MONITORS;
+  private static final ConcurrentMap<AuroraServer, Integer> preConfiguredWeights =
+    new ConcurrentHashMap<>();
   private static volatile long checkFrequencyMillis = 500;
   private static volatile BiConsumer<AuroraServer, Throwable> errorExceptionHandler;
 
@@ -101,7 +103,10 @@ public class AuroraClusterMonitor {
    * When a weight higher than the default of {@code 1} is used, it is in effect as if that server 
    * was in the cluster multiple times.  For example a cluster with a server X of weight 1, and 
    * server Y of weight 2, would send 2/3's of the requests to server Y.
-   * 
+   *
+   * <p>This call immediately applies to all initialised clusters, and will also apply to clusters
+   * initialised after.
+   *
    * @param host The host to update against
    * @param port The port for the replica server
    * @param weight The weight to apply to this replica
@@ -111,17 +116,12 @@ public class AuroraClusterMonitor {
       throw new IllegalArgumentException("Negative server weights not allowed");
     } else if (weight > 100) {
       throw new IllegalArgumentException("Maximum allowed weight is 100");
-    } else if (MONITORS.isEmpty()) {
-      throw new IllegalStateException("No aurora clusters monitored, make sure database is setup");
     }
-    
-    boolean updated = false;
+
     for (AuroraClusterMonitor acm : MONITORS.values()) {
-      updated |= acm.clusterChecker.queueReplicaWeightUpdate(host, port, weight);
+      acm.clusterChecker.queueReplicaWeightUpdate(host, port, weight);
     }
-    if (! updated) {
-      throw new IllegalStateException("Could not find server: " + host + ":" + port);
-    }
+    preConfiguredWeights.put(new AuroraServer(host, port, null), weight);
   }
 
   /**
@@ -134,18 +134,18 @@ public class AuroraClusterMonitor {
    */
   protected static AuroraClusterMonitor getMonitor(DelegateAuroraDriver driver, AuroraServer[] servers) {
     // the implementation of `AbstractSet`'s equals will verify the size, followed by `containsAll`.
-    // Since order and other variations should not impact the lookup we just store the provided set 
+    // Since order and other variations should not impact the lookup we just store the provided set
     // into the map directly for efficiency when the same set is provided multiple times
-    
+
     AuroraServersKey mapKey = new AuroraServersKey(servers);
     AuroraClusterMonitor result = MONITORS.get(mapKey);
     if (result != null) {
       return result;
     }
-    
+
     return MONITORS.computeIfAbsent(mapKey,
                                     (s) -> new AuroraClusterMonitor(MONITOR_SCHEDULER,
-                                                                    checkFrequencyMillis, 
+                                                                    checkFrequencyMillis,
                                                                     driver, mapKey.clusterServers));
   }
 
@@ -364,6 +364,11 @@ public class AuroraClusterMonitor {
       pendingServerWeightUpdates = new ConcurrentHashMap<>();
 
       for (AuroraServer server : clusterServers) {
+        Integer preConfiguredWeight = preConfiguredWeights.get(server);
+        if (null != preConfiguredWeight) {
+          server.setWeight(preConfiguredWeight);
+        }
+
         ServerMonitor monitor = new ServerMonitor(scheduler, driver, server, this);
         allServers.put(server, monitor);
 
