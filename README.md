@@ -11,7 +11,7 @@ For MySQL:
 <dependency>
 	<groupId>org.threadly</groupId>
 	<artifactId>auroraArc-mysql</artifactId>
-	<version>0.14</version>
+	<version>0.15</version>
 </dependency>
 ```
 
@@ -21,7 +21,7 @@ For Postgresql:
 <dependency>
   <groupId>org.threadly</groupId>
   <artifactId>auroraArc-psql</artifactId>
-  <version>0.14</version>
+  <version>0.15</version>
 </dependency>
 ```
 
