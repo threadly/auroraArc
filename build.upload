@@ -1,11 +1,10 @@
 def findJVM() {
-  String[] java8Paths = new String[5]
-  java8Paths[0] = "/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/"
-  java8Paths[1] = "/usr/lib/jvm/java-8-openjdk/jre/lib/"
-  java8Paths[2] = "/usr/lib/jvm/java-1.8.0-openjdk-amd64/jre/lib/"
-  java8Paths[3] = "/usr/lib/jvm/java-1.8.0-openjdk/jre/lib/"
-  java8Paths[4] = "/usr/lib/jvm/java-8-sun/jre/lib/"
-  for (String path : java8Paths) {
+  String[] java11Paths = new String[4]
+  java11Paths[0] = "/usr/lib/jvm/java-11-openjdk-amd64/lib/"
+  java11Paths[1] = "/usr/lib/jvm/java-11-openjdk/lib/"
+  java11Paths[2] = "/usr/lib/jvm/openjdk-11/lib/"
+  java11Paths[3] = "/usr/lib/jvm/java-11-sun/lib/"
+  for (String path : java11Paths) {
     if (new java.io.File(path).exists()) {
       return path
     }
@@ -27,17 +26,17 @@ subprojects {
     }
   }
 
-  sourceCompatibility = 1.8
-  targetCompatibility = 1.8
+  sourceCompatibility = 1.11
+  targetCompatibility = 1.11
 
   compileJava {
     def jvmPath = findJVM()
     if (jvmPath == null) {
-      println 'Unable to find java 8 rt.jar, will cause failure so exiting now'
+      println 'Unable to find java 11 install, will cause failure so exiting now'
       println ''
       System.exit(1)
     }
-    println 'Using java 8: ' + jvmPath
+    println 'Using java 11: ' + jvmPath
     options.bootstrapClasspath = fileTree(include: ['*.jar'], dir: jvmPath)
   }
 
@@ -65,17 +64,17 @@ subprojects {
     }
     getReports().getJunitXml().setDestination(file("$buildDir/reports/tests/xml"))
     getReports().getHtml().setDestination(file("$buildDir/reports/tests/html"))
-    setBinResultsDir(file("$buildDir/reports/tests/bin"))
+    setBinaryResultsDirectory(file("$buildDir/reports/tests/bin"))
   }
 
-  build.dependsOn jacocoTestReport
+  test.finalizedBy("jacocoTestReport")
 
   jacocoTestReport {
     reports {
-      csv.enabled = false
-      xml.enabled = true
+      csv.required = false
+      xml.required = true
       xml.destination = file("$buildDir/reports/jacoco/jacoco.xml")
-      html.enabled = true
+      html.required = true
       html.destination = file("$buildDir/reports/jacoco/html")
     }
     doLast {
@@ -107,12 +106,12 @@ subprojects {
     classifier = 'sources'
   }
 
-  build.dependsOn("copyLibs");
-
   task copyLibs(type: Copy) {
     into "$buildDir/dependencies/"
     from configurations.testRuntimeClasspath
   }
+
+  build.finalizedBy("copyLibs")
 
   artifacts {
     archives jar

@@ -30,17 +30,17 @@ subprojects {
     }
     getReports().getJunitXml().setDestination(file("$buildDir/reports/tests/xml"))
     getReports().getHtml().setDestination(file("$buildDir/reports/tests/html"))
-    setBinResultsDir(file("$buildDir/reports/tests/bin"))
+    setBinaryResultsDirectory(file("$buildDir/reports/tests/bin"))
   }
 
-  build.dependsOn jacocoTestReport
+  test.finalizedBy("jacocoTestReport")
 
   jacocoTestReport {
     reports {
-      csv.enabled = false
-      xml.enabled = true
+      csv.required = false
+      xml.required = true
       xml.destination = file("$buildDir/reports/jacoco/jacoco.xml")
-      html.enabled = true
+      html.required = true
       html.destination = file("$buildDir/reports/jacoco/html")
     }
     doLast {
@@ -72,12 +72,12 @@ subprojects {
     classifier = 'sources'
   }
 
-  build.dependsOn("copyLibs");
-
   task copyLibs(type: Copy) {
     into "$buildDir/dependencies/"
     from configurations.testRuntimeClasspath
   }
+
+  build.finalizedBy("copyLibs")
 
   artifacts {
     archives jar
