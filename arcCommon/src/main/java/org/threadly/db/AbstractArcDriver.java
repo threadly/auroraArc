@@ -5,7 +5,7 @@ package org.threadly.db;
  */
 public abstract class AbstractArcDriver implements java.sql.Driver {
   public static final int ARC_MAJOR_VERSION = 0;
-  public static final int ARC_MINOR_VERSION = 8;
+  public static final int ARC_MINOR_VERSION = 17;
   
   @Override
   public int getMajorVersion() {
