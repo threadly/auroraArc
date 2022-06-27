@@ -35,8 +35,13 @@ public class DelegateMockDriver {
       public String getDriverName() {
         return "MockDriver";
       }
-      
-      @Override
+
+        @Override
+        public int getDefaultPort() {
+            return 0;
+        }
+
+        @Override
       public boolean isMasterServer(AuroraServer server, Connection serverConnection) throws SQLException {
         // default logic matches mysql
         try (PreparedStatement ps =

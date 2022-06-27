@@ -57,19 +57,19 @@ public class AuroraClusterMonitorJMH {
     }
     
     Map<AuroraServer, ServerMonitor> weightedServers = new HashMap<>();
-    AuroraServer masterServer = new AuroraServer("masterHost", new Properties());
+    AuroraServer masterServer = new AuroraServer("masterHost", masterMockDriver, new Properties());
     weightedServers.put(masterServer, 
                         new TestServerMonitor(masterMockDriver, TEST_SCHEDULER, masterServer));
-    AuroraServer w0Server = new AuroraServer("replicaHostW0", new Properties());
+    AuroraServer w0Server = new AuroraServer("replicaHostW0", replicaMockDriver, new Properties());
     weightedServers.put(w0Server, 
                         new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, w0Server));
-    AuroraServer w1Server = new AuroraServer("replicaHostW1", new Properties());
+    AuroraServer w1Server = new AuroraServer("replicaHostW1", replicaMockDriver, new Properties());
     weightedServers.put(w1Server, 
                         new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, w1Server));
-    AuroraServer w2Server = new AuroraServer("replicaHostW2", new Properties());
+    AuroraServer w2Server = new AuroraServer("replicaHostW2", replicaMockDriver, new Properties());
     weightedServers.put(w2Server, 
                         new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, w2Server));
-    AuroraServer w10Server = new AuroraServer("replicaHostW10", new Properties());
+    AuroraServer w10Server = new AuroraServer("replicaHostW10", replicaMockDriver,  new Properties());
     weightedServers.put(w10Server, 
                         new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, w10Server));
     
@@ -89,16 +89,16 @@ public class AuroraClusterMonitorJMH {
     Map<AuroraServer, ServerMonitor> unweightedServers = new HashMap<>();
     unweightedServers.put(masterServer, 
                           new TestServerMonitor(masterMockDriver, TEST_SCHEDULER, masterServer));
-    AuroraServer replica1Server = new AuroraServer("replicaHost1", new Properties());
+    AuroraServer replica1Server = new AuroraServer("replicaHost1", replicaMockDriver,  new Properties());
     unweightedServers.put(replica1Server, 
                           new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, replica1Server));
-    AuroraServer replica2Server = new AuroraServer("replicaHost2", new Properties());
+    AuroraServer replica2Server = new AuroraServer("replicaHost2", replicaMockDriver, new Properties());
     unweightedServers.put(replica2Server, 
                           new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, replica2Server));
-    AuroraServer replica3Server = new AuroraServer("replicaHost3", new Properties());
+    AuroraServer replica3Server = new AuroraServer("replicaHost3", replicaMockDriver, new Properties());
     unweightedServers.put(replica3Server, 
                           new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, replica3Server));
-    AuroraServer replica4Server = new AuroraServer("replicaHost4", new Properties());
+    AuroraServer replica4Server = new AuroraServer("replicaHost4", replicaMockDriver, new Properties());
     unweightedServers.put(replica4Server, 
                           new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, replica4Server));
     
@@ -108,16 +108,16 @@ public class AuroraClusterMonitorJMH {
     Map<AuroraServer, ServerMonitor> zeroweightedServers = new HashMap<>();
     zeroweightedServers.put(masterServer, 
                             new TestServerMonitor(masterMockDriver, TEST_SCHEDULER, masterServer));
-    AuroraServer zeroReplica1Server = new AuroraServer("zeroReplicaHost1", new Properties());
+    AuroraServer zeroReplica1Server = new AuroraServer("zeroReplicaHost1", replicaMockDriver,  new Properties());
     zeroweightedServers.put(zeroReplica1Server, 
                             new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, zeroReplica1Server));
-    AuroraServer zeroReplica2Server = new AuroraServer("zeroReplicaHost2", new Properties());
+    AuroraServer zeroReplica2Server = new AuroraServer("zeroReplicaHost2", replicaMockDriver, new Properties());
     zeroweightedServers.put(zeroReplica2Server, 
                             new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, zeroReplica2Server));
-    AuroraServer zeroReplica3Server = new AuroraServer("zeroReplicaHost3", new Properties());
+    AuroraServer zeroReplica3Server = new AuroraServer("zeroReplicaHost3", replicaMockDriver, new Properties());
     zeroweightedServers.put(zeroReplica3Server, 
                             new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, zeroReplica3Server));
-    AuroraServer zeroReplica4Server = new AuroraServer("zeroReplicaHost4", new Properties());
+    AuroraServer zeroReplica4Server = new AuroraServer("zeroReplicaHost4", replicaMockDriver, new Properties());
     zeroweightedServers.put(zeroReplica4Server, 
                             new TestServerMonitor(replicaMockDriver, TEST_SCHEDULER, zeroReplica4Server));
     

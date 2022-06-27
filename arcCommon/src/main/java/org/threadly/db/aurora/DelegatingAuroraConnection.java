@@ -167,17 +167,17 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
     String urlArgs = url.substring(endDelim);
     // TODO - lookup individual servers from a single cluster URL
     //        maybe derived from AuroraClusterMonitor to help ensure things remain consistent
-    String[] servers = url.substring(dDriver.getArcPrefix().length(), endDelim).split(",");
-    if (servers.length == 0) {
+    String[] hosts = url.substring(dDriver.getArcPrefix().length(), endDelim).split(",");
+    if (hosts.length == 0) {
       throw new IllegalArgumentException("Invalid URL: " + url);
     }
     // de-duplicate servers if needed
-    int serverCount = servers.length; // can't reference .length again, may contain duplicate records
+    int serverCount = hosts.length; // can't reference .length again, may contain duplicate records
     for (int i1 = 0; i1 < serverCount; i1++) {
       for (int i2 = i1 + 1; i2 < serverCount; i2++) {
-        if (servers[i1].equals(servers[i2])) {
+        if (hosts[i1].equals(hosts[i2])) {
           serverCount--;
-          System.arraycopy(servers, i2 + 1, servers, i2, serverCount - i2);
+          System.arraycopy(hosts, i2 + 1, hosts, i2, serverCount - i2);
           i2--;
         }
       }
@@ -198,9 +198,9 @@ public class DelegatingAuroraConnection extends AbstractDelegatingConnection imp
     // other connections to check the status
     Pair<AuroraServer, SQLException> connectException = null;
     for (int i = 0; i < serverCount; i++) {
-      this.servers[i] = new AuroraServer(servers[i], info);
+      this.servers[i] = new AuroraServer(hosts[i], dDriver, info);
       try {
-        connections[i] = connectionStateManager.wrapConnection(dDriver.connect(servers[i] + urlArgs, info));
+        connections[i] = connectionStateManager.wrapConnection(dDriver.connect(hosts[i] + urlArgs, info));
         if (firstConnectionHolder == null) {
           firstConnectionHolder = connections[i];
         }

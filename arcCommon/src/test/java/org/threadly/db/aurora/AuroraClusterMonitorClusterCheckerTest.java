@@ -43,10 +43,10 @@ public class AuroraClusterMonitorClusterCheckerTest {
     SERVER_MONITOR_SCHEDULER.clearTasks();
     
     clusterServers = new HashMap<>();
-    AuroraServer testServer1 = new AuroraServer("host1", new Properties());
+    AuroraServer testServer1 = new AuroraServer("host1", MOCK_DRIVER, new Properties());
     clusterServers.put(testServer1, new TestServerMonitor(MOCK_DRIVER, testScheduler, 
                                                           SERVER_MONITOR_SCHEDULER, testServer1));
-    AuroraServer testServer2 = new AuroraServer("host2", new Properties());
+    AuroraServer testServer2 = new AuroraServer("host2", MOCK_DRIVER, new Properties());
     clusterServers.put(testServer2, new TestServerMonitor(MOCK_DRIVER, testScheduler, 
                                                           SERVER_MONITOR_SCHEDULER, testServer2));
     
@@ -77,7 +77,7 @@ public class AuroraClusterMonitorClusterCheckerTest {
   
   @Test
   public void expediteServerCheckTest() {
-    AuroraServer testServer = new AuroraServer("host1", new Properties());
+    AuroraServer testServer = new AuroraServer("host1", MOCK_DRIVER, new Properties());
     clusterChecker.expediteServerCheck(testServer);
     
     assertEquals(1, clusterChecker.serversWaitingExpeditiedCheck.size());
@@ -124,7 +124,7 @@ public class AuroraClusterMonitorClusterCheckerTest {
   
   @Test
   public void expediteUnknownServerCheckTest() {
-    clusterChecker.expediteServerCheck(new AuroraServer("missingFooHost", new Properties()));
+    clusterChecker.expediteServerCheck(new AuroraServer("missingFooHost", MOCK_DRIVER, new Properties()));
 
     assertEquals(0, clusterChecker.serversWaitingExpeditiedCheck.size());
     assertEquals(0, SERVER_MONITOR_SCHEDULER.tick());

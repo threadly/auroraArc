@@ -76,7 +76,8 @@ public abstract class DelegateAuroraDriver {
     this.driverConnectPrefix = driverConnectPrefix;
     this.delegateDriver = delegateDriver;
   }
-  
+
+  public abstract int getDefaultPort();
   /**
    * Getter for the jdbc url prefix used for the auroraArc driver.
    * 
