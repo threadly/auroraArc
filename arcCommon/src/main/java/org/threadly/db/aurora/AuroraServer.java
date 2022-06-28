@@ -6,7 +6,6 @@ import java.util.Properties;
  * Information about an Aurora server so that it can be referenced (and if needed connected to).
  */
 public class AuroraServer implements Comparable<AuroraServer> {
-  private static final int DEFAULT_PORT = 3306;
   
   private final String host;
   private final int port;

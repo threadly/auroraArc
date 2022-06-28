@@ -14,6 +14,8 @@ import org.threadly.db.aurora.DelegateAuroraDriver;
  */
 public class PsqlDelegateDriver extends DelegateAuroraDriver {
 
+  private static final int DEFAULT_PORT = 5432;
+
   /**
    * Construct a new delegate driver for the postgresql driver {@code org.postgresql.Driver}.
    */
@@ -36,7 +38,7 @@ public class PsqlDelegateDriver extends DelegateAuroraDriver {
   }
 
   public int getDefaultPort() {
-    return 5432;
+    return DEFAULT_PORT;
   }
 
   @Override

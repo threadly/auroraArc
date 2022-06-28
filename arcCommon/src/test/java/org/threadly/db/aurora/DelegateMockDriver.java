@@ -36,10 +36,10 @@ public class DelegateMockDriver {
         return "MockDriver";
       }
 
-        @Override
-        public int getDefaultPort() {
-            return 0;
-        }
+      @Override
+      public int getDefaultPort() {
+        return 0;
+      }
 
         @Override
       public boolean isMasterServer(AuroraServer server, Connection serverConnection) throws SQLException {
