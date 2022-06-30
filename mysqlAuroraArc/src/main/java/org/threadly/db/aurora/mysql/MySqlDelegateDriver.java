@@ -13,6 +13,8 @@ import org.threadly.db.aurora.DelegateAuroraDriver;
  * creating a URL that is suited for that driver and then using it to establish the connection.
  */
 public final class MySqlDelegateDriver extends DelegateAuroraDriver {
+  private static final int DEFAULT_PORT = 3306;
+
   /**
    * Construct a new delegate driver for the mysql driver {@code com.mysql.cj.jdbc.Driver}.
    * 
@@ -37,6 +39,11 @@ public final class MySqlDelegateDriver extends DelegateAuroraDriver {
   }
 
   @Override
+  public int getDefaultPort() {
+    return DEFAULT_PORT;
+  }
+
+    @Override
   public boolean isMasterServer(AuroraServer server, 
                                 Connection serverConnection) throws IllegalDriverStateException, SQLException {
     try (PreparedStatement ps =

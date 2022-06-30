@@ -76,7 +76,14 @@ public abstract class DelegateAuroraDriver {
     this.driverConnectPrefix = driverConnectPrefix;
     this.delegateDriver = delegateDriver;
   }
-  
+
+  /**
+   *
+   * @return default port for the specific driver
+   * 5432 for PostgreSQL
+   * 3306 for MySql
+   */
+  public abstract int getDefaultPort();
   /**
    * Getter for the jdbc url prefix used for the auroraArc driver.
    * 

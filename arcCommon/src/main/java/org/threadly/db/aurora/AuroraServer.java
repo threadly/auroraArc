@@ -6,7 +6,6 @@ import java.util.Properties;
  * Information about an Aurora server so that it can be referenced (and if needed connected to).
  */
 public class AuroraServer implements Comparable<AuroraServer> {
-  private static final int DEFAULT_PORT = 3306;
   
   private final String host;
   private final int port;
@@ -17,17 +16,18 @@ public class AuroraServer implements Comparable<AuroraServer> {
   /**
    * Construct a new {@link AuroraServer} for a given {@code host:post} string.
    * 
-   * @param server Host and port within a single string
+   * @param host Host and port within a single string
+   * @param driver delegate, only currently used to get the default port
    * @param info Properties for the connection
    */
-  public AuroraServer(String server, Properties info) {
-    int delim = server.indexOf(':');
+  public AuroraServer(String host, DelegateAuroraDriver driver,  Properties info) {
+    int delim = host.indexOf(':');
     if (delim > 0) {
-      host = server.substring(0, delim).intern();
-      port = Integer.parseInt(server.substring(delim + 1));
+      this.host = host.substring(0, delim).intern();
+      port = Integer.parseInt(host.substring(delim + 1));
     } else {
-      host = server.intern();
-      port = DEFAULT_PORT;
+      this.host = host.intern();
+      port = driver.getDefaultPort();
     }
     this.info = info; // not currently considered in equality or hash
 

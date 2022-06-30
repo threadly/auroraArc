@@ -54,7 +54,7 @@ public class PsqlAuroraClusterMonitorTest {
   private AuroraServer[] makeDummySet() {
     AuroraServer[] result = new AuroraServer[4];
     for (int i = 0; i < result.length; i++) {
-      result[result.length - 1 - i] = new AuroraServer("host" + (i + 1) + DOMAIN, new Properties());
+      result[result.length - 1 - i] = new AuroraServer("host" + (i + 1) + DOMAIN, mockDriver.getRight(), new Properties());
     }
     return result;
   }

@@ -13,6 +13,9 @@ import org.threadly.db.aurora.DelegateAuroraDriver;
  * creating a URL that is suited for that driver and then using it to establish the connection.
  */
 public class PsqlDelegateDriver extends DelegateAuroraDriver {
+
+  private static final int DEFAULT_PORT = 5432;
+
   /**
    * Construct a new delegate driver for the postgresql driver {@code org.postgresql.Driver}.
    */
@@ -32,6 +35,10 @@ public class PsqlDelegateDriver extends DelegateAuroraDriver {
   @Override
   public String getDriverName() {
     return "auroraArc-psql";
+  }
+
+  public int getDefaultPort() {
+    return DEFAULT_PORT;
   }
 
   @Override
