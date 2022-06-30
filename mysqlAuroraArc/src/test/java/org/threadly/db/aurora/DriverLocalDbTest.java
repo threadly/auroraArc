@@ -33,7 +33,6 @@ import org.junit.Test;
 import org.junit.runners.MethodSorters;
 import org.threadly.concurrent.UnfairExecutor;
 import org.threadly.db.LoggingDriver;
-import org.threadly.db.aurora.Driver;
 import org.threadly.db.aurora.AuroraClusterMonitor.AuroraServersKey;
 import org.threadly.db.aurora.AuroraClusterMonitor.ClusterChecker;
 import org.threadly.util.Clock;
@@ -261,8 +260,8 @@ public class DriverLocalDbTest {
   
   @Test
   public void connectErrorDelayedTest() throws SQLException {
-    AuroraServer[] servers = new AuroraServer[] { new AuroraServer("127.0.0.1:3306", new Properties()), 
-                                                  new AuroraServer("127.0.0.2:6603", new Properties()) };
+    AuroraServer[] servers = new AuroraServer[] { new AuroraServer("127.0.0.1:3306", null, new Properties()), 
+                                                  new AuroraServer("127.0.0.2:6603", null, new Properties()) };
     // put in monitor so we don't fail trying to establish cluster monitor
     AuroraClusterMonitor.MONITORS.put(new AuroraServersKey(servers), 
                                       new AuroraClusterMonitor(mock(ClusterChecker.class)));

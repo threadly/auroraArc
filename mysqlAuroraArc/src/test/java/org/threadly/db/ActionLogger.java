@@ -29,7 +29,6 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 import org.threadly.concurrent.UnfairExecutor;
-import org.threadly.db.LoggingDriver;
 import org.threadly.util.Clock;
 import org.threadly.util.StringUtils;
 import org.threadly.util.StackSuppressedRuntimeException;

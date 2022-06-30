@@ -13,10 +13,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.threadly.db.aurora.AuroraClusterMonitor;
-import org.threadly.db.aurora.AuroraServer;
-import org.threadly.db.aurora.DelegateAuroraDriver;
-import org.threadly.db.aurora.DelegateMockDriver;
 import org.threadly.db.aurora.DelegateMockDriver.MockDriver;
 import org.threadly.db.aurora.mysql.MySqlDelegateDriver;
 import org.threadly.util.Pair;
@@ -58,18 +54,18 @@ public class MySqlAuroraClusterMonitorTest {
     if (ThreadLocalRandom.current().nextBoolean()) {
       for (int i = HOST_START_NUM; i <= HOST_END_NUM; i++) {
         if (i != MASTER_HOST) {
-          result[index++] = new AuroraServer("host" + i, new Properties());
+          result[index++] = new AuroraServer("host" + i, mockDriver.getRight(), new Properties());
         }
       }
     } else {
       for (int i = HOST_END_NUM; i >= HOST_START_NUM; i--) {
         if (i != MASTER_HOST) {
-          result[index++] = new AuroraServer("host" + i, new Properties());
+          result[index++] = new AuroraServer("host" + i, mockDriver.getRight(), new Properties());
         }
       }
     }
     // add master last
-    result[index++] = new AuroraServer("host" + MASTER_HOST, new Properties());
+    result[index++] = new AuroraServer("host" + MASTER_HOST, mockDriver.getRight(), new Properties());
     return result;
   }
 

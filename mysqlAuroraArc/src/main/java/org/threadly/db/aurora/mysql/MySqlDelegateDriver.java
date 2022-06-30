@@ -43,7 +43,7 @@ public final class MySqlDelegateDriver extends DelegateAuroraDriver {
     return DEFAULT_PORT;
   }
 
-    @Override
+  @Override
   public boolean isMasterServer(AuroraServer server, 
                                 Connection serverConnection) throws IllegalDriverStateException, SQLException {
     try (PreparedStatement ps =

@@ -37,6 +37,7 @@ public class PsqlDelegateDriver extends DelegateAuroraDriver {
     return "auroraArc-psql";
   }
 
+  @Override
   public int getDefaultPort() {
     return DEFAULT_PORT;
   }

@@ -31,6 +31,7 @@ public class AuroraClusterMonitorClusterCheckerTest {
     } catch (SQLException e) {
       // not possible
     }
+    when(MOCK_DRIVER.getDefaultPort()).thenReturn(3306);
   }
   
   private TestableScheduler testScheduler;

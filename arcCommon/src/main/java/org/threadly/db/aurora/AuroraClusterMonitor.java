@@ -743,7 +743,7 @@ public class AuroraClusterMonitor {
       boolean currentlyMasterServer = false;
       Throwable currentError = null;
       try {
-        if (! serverConnection.isValid(CONNECTION_VALID_CHECK_TIMEOUT)) {
+        if (serverConnection == null || ! serverConnection.isValid(CONNECTION_VALID_CHECK_TIMEOUT)) {
           // try to avoid an error that will mark as unhealthy, if invalid because exception was 
           // thrown during reconnect the failure will be thrown when the connection is to be used
           reconnect();
