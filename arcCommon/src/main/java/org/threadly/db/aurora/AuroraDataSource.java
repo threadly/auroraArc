@@ -7,7 +7,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Properties;
 import java.util.logging.Logger;
-
 import javax.naming.NamingException;
 import javax.naming.RefAddr;
 import javax.naming.Reference;

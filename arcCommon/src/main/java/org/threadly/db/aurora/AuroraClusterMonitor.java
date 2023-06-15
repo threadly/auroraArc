@@ -45,7 +45,7 @@ public class AuroraClusterMonitor {
   protected static final int MAXIMUM_THREAD_POOL_SIZE = 64;
   protected static final SchedulerService MONITOR_SCHEDULER;
   protected static final ConcurrentMap<AuroraServersKey, AuroraClusterMonitor> MONITORS;
-  private static final ConcurrentMap<AuroraServer, Integer> preConfiguredWeights =
+  private static final ConcurrentMap<AuroraServer, Integer> PRE_CONFIGURED_WEIGHTS =
     new ConcurrentHashMap<>();
   private static volatile long checkFrequencyMillis = 500;
   private static volatile BiConsumer<AuroraServer, Throwable> errorExceptionHandler;
@@ -121,7 +121,7 @@ public class AuroraClusterMonitor {
     for (AuroraClusterMonitor acm : MONITORS.values()) {
       acm.clusterChecker.queueReplicaWeightUpdate(host, port, weight);
     }
-    preConfiguredWeights.put(new AuroraServer(host, port, null), weight);
+    PRE_CONFIGURED_WEIGHTS.put(new AuroraServer(host, port, null), weight);
   }
 
   /**
@@ -364,7 +364,7 @@ public class AuroraClusterMonitor {
       pendingServerWeightUpdates = new ConcurrentHashMap<>();
 
       for (AuroraServer server : clusterServers) {
-        Integer preConfiguredWeight = preConfiguredWeights.get(server);
+        Integer preConfiguredWeight = PRE_CONFIGURED_WEIGHTS.get(server);
         if (null != preConfiguredWeight) {
           server.setWeight(preConfiguredWeight);
         }

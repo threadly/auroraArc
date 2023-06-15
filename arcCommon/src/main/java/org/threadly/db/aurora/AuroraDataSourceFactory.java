@@ -1,7 +1,6 @@
 package org.threadly.db.aurora;
 
 import java.util.Hashtable;
-
 import javax.naming.Context;
 import javax.naming.Name;
 import javax.naming.Reference;

@@ -44,6 +44,10 @@ import java.util.logging.Logger;
  * driver development.
  */
 public class LoggingDriver extends AbstractArcDriver {
+  /**
+   * URL Prefix to be used for the LoggingDriver.  This is registered with the {@link DriverManager}
+   * like other drivers are.
+   */
   public static final String URL_PREFIX = "jdbc:mysql:logging://";
   protected static final String DELEGATE_DRIVER_PREFIX;
   protected static final java.sql.Driver DELEGATE_DRIVER;
@@ -71,6 +75,12 @@ public class LoggingDriver extends AbstractArcDriver {
   
   private final String logPrefix = Integer.toHexString(System.identityHashCode(this)) + "-SqlDriver> ";
   
+  /**
+   * Function to log driver action.  Override this implementation if you want to change how logging
+   * is outputted.
+   *
+   * @param msg Message to be logged (without any driver instance identification)
+   */
   protected void log(String msg) {
     System.out.println(logPrefix + msg);
   }
