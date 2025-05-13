@@ -1,5 +1,8 @@
-# AuroraArc [![Build status](https://badge.buildkite.com/eccfc05b1cb909831416e399fe015cc14aaae9631e19e5d101.svg)](https://buildkite.com/threadly/nightly-auroraarc)
-This project is in early phases, though has had extensive production usage.  It should be able to be carefully integrated into your projects.  Issues can be opened for any questions, or concerns found.
+# AuroraArc
+
+Project status: Stale
+
+Although usable (as of two years ago). This project has not evolved beyond the early stages. Issues can be opened for any questions, or desire to renew this work.
 
 The goal is to provide a fault tolerant, and high performance, driver for AWS's Aurora servers.  The driver is designed to be small and light weight, with minimal external dependencies.
 
